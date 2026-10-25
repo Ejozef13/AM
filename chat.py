@@ -1,39 +1,62 @@
 import json
 import urllib.request
 
-question = input("You: ").strip()
-if not question:
-    raise SystemExit("No question entered.")
+messages = []
 
-payload = {
-    "model": "gpt-oss:20b",
-    "messages": [
-        {"role": "user", "content": question},
-    ],
-    "think": "low",
-    "stream": False,
-    "keep_alive": "5m",
-    "options": {
-        "num_ctx": 8192,
-        "num_predict": 1500,
-    },
-}
+print("AM local chat. Type /bye to exit.")
 
-request = urllib.request.Request(
-    "http://127.0.0.1:11434/api/chat",
-    data=json.dumps(payload).encode("utf-8"),
-    headers={"Content-Type": "application/json"},
-)
+while True:
+    question = input("\nYou: ").strip()
 
-print("Waiting for AM...", flush=True)
+    if question.lower() == "/bye":
+        print("Session ended.")
+        break
 
-with urllib.request.urlopen(request, timeout=600) as response:
-    result = json.load(response)
+    if not question:
+        continue
 
-if "error" in result:
-    raise RuntimeError(result["error"])
+    messages.append(
+        {
+            "role": "user",
+            "content": question,
+        }
+    )
 
-print("\nAM:", result["message"]["content"])
+    payload = {
+        "model": "gpt-oss:20b",
+        "messages": messages,
+        "think": "low",
+        "stream": False,
+        "keep_alive": "5m",
+        "options": {
+            "num_ctx": 8192,
+            "num_predict": 1500,
+        },
+    }
 
-if result.get("done_reason") == "length":
-    print("\n[Output limit reached; the answer may be incomplete.]")
+    request = urllib.request.Request(
+        "http://127.0.0.1:11434/api/chat",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+
+    print("Waiting for AM...", flush=True)
+
+    with urllib.request.urlopen(request, timeout=600) as response:
+        result = json.load(response)
+
+    if "error" in result:
+        raise RuntimeError(result["error"])
+
+    answer = result["message"]["content"]
+    print("\nAM:", answer)
+
+    messages.append(
+        {
+            "role": "assistant",
+            "content": answer,
+        }
+    )
+
+    if result.get("done_reason") == "length":
+        print("\n[Output limit reached; the answer may be incomplete.]")

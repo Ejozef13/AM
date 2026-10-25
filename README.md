@@ -4,7 +4,8 @@ A learning-first, local AI study assistant.
 
 ## Current capabilities
 
-- Single-turn terminal chat through Ollama's local API
+- Multi-turn terminal chat through Ollama's local API
+- In-memory conversation history and /bye command
 - Synthetic long-context retrieval probe
 - Initial GPU inference benchmarks
 
@@ -26,8 +27,8 @@ Model weights are managed separately by Ollama.
 
 ## Current limitations
 
-- Chat history is not yet implemented
-- Benchmark results are exploratory
-- Long-context retrieval has produced both correct and incorrect results
+- Conversations are not saved between sessions
+- Long conversations may exceed the configured context window
+- Connection failures currently terminate the client
 
 See docs/benchmark-notes.md for initial measurements 
