@@ -1,0 +1,23 @@
+name: am
+
+services:
+  open-webui:
+    image: "${WEBUI_IMAGE:?Set WEBUI_IMAGE in .env.openwebui}"
+    network_mode: host
+
+    environment:
+      HOST: "127.0.0.1"
+      PORT: "8080"
+      CORS_ALLOW_ORIGIN: "http://127.0.0.1:8080;http://localhost:8080"
+      OLLAMA_BASE_URL: "http://127.0.0.1:11434"
+      ENABLE_OPENAI_API: "false"
+      WEBUI_AUTH: "true"
+      WEBUI_SECRET_KEY: "${WEBUI_SECRET_KEY:?Set WEBUI_SECRET_KEY}"
+
+    volumes:
+      - open_webui_data:/app/backend/data
+
+    restart: "no"
+
+volumes:
+  open_webui_data:
