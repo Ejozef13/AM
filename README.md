@@ -27,8 +27,7 @@ Model weights are managed separately by Ollama.
 
 ## Current limitations
 
-- Conversations are not saved between sessions
-- Long conversations may exceed the configured context window
-- Connection failures currently terminate the client
+- Connection failures display a message and allow another attempt
+- Failed requests are excluded from conversation history
 
 See docs/benchmark-notes.md for initial measurements 
