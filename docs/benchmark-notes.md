@@ -22,3 +22,26 @@ Runtime: Ollama 0.40.11, ROCm backend
 - Different reasoning settings and tokenizers between models
 - Repeated prompts may benefit from caching
 - Configured context capacity differs from actual input length
+
+## Terminal foundation acceptance checks
+
+- 15 offline behavioral tests passed.
+- Verified help, status, unknown-command handling, history, clear, and exit.
+- Verified turn and character limits.
+- Verified service-outage recovery without restarting the client.
+- Failed requests were excluded from history.
+- Verified selected-model unloading and repeated off commands.
+
+### Structured-output retrieval probes
+
+Model: gpt-oss:20b
+Configured context: 32,768 tokens
+Placement: 100% GPU
+
+| Records | Seed | Input tokens | Exact checks | Generation tokens/sec | Total seconds |
+|---|---|---|---|---|---|
+| 600 | 42 | 9,058 | 4/4 | 102.7 | 6.11 |
+| 1,800 | 43 | 26,886 | 4/4 | 90.9 | 11.13 |
+
+These are individual synthetic runs, not general accuracy guarantees.
+Prompt caching may affect timings. Hardware limits were not established.
