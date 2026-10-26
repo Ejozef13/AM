@@ -1,0 +1,12 @@
+# Keep SearXNG's default engine configuration.
+use_default_settings: true
+
+search:
+  # Open WebUI needs machine-readable JSON search results.
+  formats:
+    - html
+    - json
+
+server:
+  # This is a private, loopback-published instance.
+  limiter: false
