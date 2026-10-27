@@ -35,7 +35,9 @@ reference code. No uploaded code is executed on the host.
 For an already-authorized direct Docker installation, setup and the website
 accept `--docker-direct`. Advanced setup options include `--use-existing-image`,
 `--build-network host`, and `--ca-bundle PATH` for restricted dependency-download
-environments. The CA bundle is a build secret, not a student-container mount.
+environments. Normal setup supports the legacy Docker builder and BuildKit.
+Only `--ca-bundle` selects the separate `Dockerfile.buildkit` and requires
+BuildKit secret support. The CA bundle is a build secret, not a student-container mount.
 Build networking does not enable networking during student execution.
 
 ## Calling contracts
@@ -136,6 +138,17 @@ and student execution retain the same 30-second and 3-second limits. The normal
 app default remains 60 seconds for the outer request. An exceeded outer deadline
 is an infrastructure error, not an incorrect student answer. Live local Ollama
 generation was unavailable in this cloud environment.
+
+Compatibility follow-up: the default suite ran 131 tests (109 passed, 22 optional
+container tests skipped), including setup publication failures and browser
+disconnects during response headers/body. Normal setup no longer requires
+BuildKit; the custom-CA path selects its own Dockerfile. A real build with
+`DOCKER_BUILDKIT=0` completed dependency installation, and the resulting image
+passed restricted Java, C, and C++ compiler/execution probes. For this cloud
+network test only, the base image received the cloud's public CA bundle and
+proxy settings; certificate verification stayed enabled. The shipped default
+Dockerfile continues to use the pinned upstream Python base. Browser peer
+disconnects now close the response without an expected broken-pipe traceback.
 
 Two model calls can share mistakes, particularly when using the same model.
 Passing the combined suite does not prove the question matches its notes or

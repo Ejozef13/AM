@@ -97,16 +97,21 @@ def make_server(app, port=8090):
 
         def reply(self, status, value, mime="application/json"):
             body = json.dumps(value).encode() if mime == "application/json" else value
-            self.send_response(status)
-            self.send_header("Content-Type", mime)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy",
-                             "default-src 'self'; script-src 'self'; style-src 'self'; "
-                             "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Security-Policy",
+                                 "default-src 'self'; script-src 'self'; style-src 'self'; "
+                                 "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                # A closed/reloaded browser must not turn completed work into
+                # a request-thread traceback, including during server shutdown.
+                self.close_connection = True
 
         def valid_host(self):
             port = self.server.server_address[1]

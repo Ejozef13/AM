@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--docker-direct', action='store_true', help='Use only when already authorized for direct Docker access')
     parser.add_argument('--build-network', choices=('default', 'host'), default='default',
                         help='Dependency-build networking only; student runs always have no network')
-    parser.add_argument('--ca-bundle', type=Path, help='Optional trusted corporate/proxy CA bundle for dependency downloads')
+    parser.add_argument('--ca-bundle', type=Path, help='Optional trusted corporate/proxy CA bundle; requires BuildKit')
     parser.add_argument('--use-existing-image', action='store_true', help='Probe the already-built local compiler image without rebuilding')
     args = parser.parse_args()
     command = ['docker'] if args.docker_direct else ['sudo', '-n', 'docker']
@@ -24,10 +24,14 @@ def main():
     config = runtime / 'docker-config'; config.mkdir(mode=0o700, exist_ok=True)
     build = [*command, '--config', str(config), 'build', '--pull=false',
              '--network=' + args.build_network, '--build-arg', 'HTTP_PROXY', '--build-arg', 'HTTPS_PROXY',
-             '--build-arg', 'NO_PROXY', '-t', 'am-compiled-practice:local',
+             '--build-arg', 'NO_PROXY', '--build-arg', 'http_proxy', '--build-arg', 'https_proxy',
+             '--build-arg', 'no_proxy', '-t', 'am-compiled-practice:local',
              str(ROOT / 'infrastructure/compiled-runtime')]
     if args.ca_bundle:
-        build[-1:-1] = ['--secret', 'id=am_ca_bundle,src=' + str(args.ca_bundle.resolve())]
+        # Only the optional custom-CA build needs BuildKit secret mounts.
+        # The normal Dockerfile also works with Docker's legacy builder.
+        build[-1:-1] = ['--file', str(ROOT / 'infrastructure/compiled-runtime/Dockerfile.buildkit'),
+                       '--secret', 'id=am_ca_bundle,src=' + str(args.ca_bundle.resolve())]
     try:
         if not args.use_existing_image:
             print('Building compiler dependencies. This is a one-time image build; no student code is used.', flush=True)

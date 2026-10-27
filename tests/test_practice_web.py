@@ -57,6 +57,19 @@ class PracticeWebTests(unittest.TestCase):
         self.assertNotIn("hints", lesson)
         self.assertEqual(lesson["test_count"], 8)
 
+    def test_reply_tolerates_a_browser_disconnecting_during_headers_or_body(self):
+        for field, error in [('end_headers', ConnectionResetError()), ('write', BrokenPipeError())]:
+            with self.subTest(field=field):
+                handler = object.__new__(self.server.RequestHandlerClass)
+                handler.send_response = Mock()
+                handler.send_header = Mock()
+                handler.end_headers = Mock()
+                handler.wfile = Mock()
+                target = handler.wfile.write if field == 'write' else handler.end_headers
+                target.side_effect = error
+                handler.reply(200, {'complete': True})
+                self.assertTrue(handler.close_connection)
+
     def test_assets_and_no_path_traversal(self):
         for path in ("/", "/app.js", "/app.css"):
             status, raw, headers = self.request(path)
