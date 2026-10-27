@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 
 from code_runner import DockerRunner, RunnerError, grade_case
+from compiled_runner import CompiledRunner
+from language_contracts import typed_cases, validate_signature
 
 ROOT = Path(__file__).resolve().parent
 
@@ -13,12 +15,16 @@ def load_lesson(path):
     """Validate the fields needed by this runner."""
     lesson = json.loads(path.read_text(encoding="utf-8"))
 
-    if not isinstance(lesson, dict) or lesson.get("language") != "python":
-        raise ValueError("Expected a Python lesson object.")
+    if not isinstance(lesson, dict) or lesson.get("language") not in ('python','java','c','cpp'):
+        raise ValueError("Expected a supported coding lesson object.")
 
     entrypoint = lesson.get("entrypoint")
     if not isinstance(entrypoint, str) or not entrypoint.isidentifier():
         raise ValueError("Lesson needs a valid entrypoint.")
+    if lesson['language'] != 'python':
+        if entrypoint != 'solve':
+            raise ValueError('Compiled lessons use the solve entrypoint.')
+        lesson['signature'] = validate_signature(lesson['language'], lesson.get('signature'))
 
     tests = lesson.get("tests")
     if not isinstance(tests, list) or not 1 <= len(tests) <= 32:
@@ -32,6 +38,8 @@ def load_lesson(path):
             or "expected" not in case
         ):
             raise ValueError("Malformed test case.")
+    if lesson['language'] != 'python':
+        lesson['tests'] = typed_cases(lesson['signature'], tests)
 
     grading = lesson.get("grading")
     if (
@@ -47,14 +55,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("lesson", type=Path)
     parser.add_argument("submission", type=Path)
+    parser.add_argument('--docker-direct', action='store_true', help='Use only when already authorized for direct Docker access')
     args = parser.parse_args()
 
     try:
         lesson = load_lesson(args.lesson)
 
-        image = (ROOT / "infrastructure/python-runner-image.txt").read_text().strip()
-
-        runner = DockerRunner(image)
+        command = ('docker',) if args.docker_direct else ('sudo','-n','docker')
+        if lesson['language'] == 'python':
+            image = (ROOT / "infrastructure/python-runner-image.txt").read_text().strip()
+            runner = DockerRunner(image, command=command)
+        else:
+            image = (ROOT / '.am-runtime/compiled-image.txt').read_text().strip()
+            runner = CompiledRunner(image, lesson['language'], lesson['signature'], command)
         source = args.submission.read_text(encoding="utf-8")
         passed = 0
 

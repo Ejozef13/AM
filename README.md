@@ -120,7 +120,7 @@ One successful run does not establish general accuracy or hardware limits.
 
 ## AI-generated coding practice
 
-The browser starts with "What are we studying today?" Choose Python, enter a topic,
+The browser starts with "What are we studying today?" Choose a language, enter a topic,
 and paste notes or add a small text/Markdown/code file. AM authors a debugging
 exercise, starter, solution, hints, and tests. A separate, blind review call derives
 another solution and more tests without seeing the author's solution or tests.
@@ -152,8 +152,20 @@ student test results; no AI decides pass/fail. Model-authored code, like student
 code, executes only in restricted containers. This is a local prototype, not a
 public hostile-code service.
 
-Python function exercises work first. Java, C, C++, PDF/slides, persistent
-progress, web research, and document retrieval are not implemented. The provided
+Python works with the existing runner. To enable Java 21, C17, and C++17, build
+and probe the compiler runtime once, then restart the website:
+
+```bash
+sudo -v
+python tools/setup_compiled_runtime.py
+python practice_web.py --diagnostics
+```
+
+The setup builds a local Docker image containing the compilers; it does not change
+Ollama or Open WebUI. Language buttons become available after all three compiler
+probes pass and the app restarts. See [language setup and supported exercises](docs/multilanguage-practice.md).
+
+PDF/slides, persistent progress, web research, and document retrieval are not implemented. The provided
 notes are sent directly to local Ollama as numbered excerpts. AM selects an
 excerpt ID; the app inserts the original text rather than asking AM to copy it.
 There is no web search or automatic source verification in this milestone.
@@ -164,6 +176,8 @@ Previous template modes remain explicit options:
 python practice_web.py --templates  # AM selects among reviewed families
 python practice_web.py --offline    # Keyword selection; no model calls
 ```
+
+Those older template modes support Python only.
 
 A failed generated draft never silently becomes a template question. Each
 exercise gets at most two drafts; if preparation fails, no partial session is

@@ -37,7 +37,8 @@ class BoundedOutput(io.StringIO):
         return super().write(text)
 
 
-data = json.load(sys.stdin)
+# One newline-delimited request avoids waiting for Docker to forward stdin EOF.
+data = json.loads(sys.stdin.readline())
 output = BoundedOutput()
 
 try:
@@ -102,17 +103,25 @@ def equivalent(first, second):
 
 
 class DockerRunner:
+    payload_limit = 32000
+    memory = "128m"
+    pids = "32"
+    nofile = "64:64"
+    cpu_limit = "2:2"
+    temporary_filesystem = "/tmp:rw,noexec,nosuid,nodev,size=16m"
+    driver = DRIVER
+
+    def valid_image(self, image):
+        return re.fullmatch(r"(?:docker\.io/library/)?python@sha256:[0-9a-f]{64}", image)
+
     def __init__(
         self,
         image,
         command=("sudo", "-n", "docker"),
         wall_seconds=15,
     ):
-        if not re.fullmatch(
-            r"(?:docker\.io/library/)?python@sha256:[0-9a-f]{64}",
-            image,
-        ):
-            raise RunnerError("Use the Python digest saved by the runtime check.")
+        if not self.valid_image(image):
+            raise RunnerError("Use the immutable runtime image ID or digest saved by setup.")
 
         self.image = image
         self.command = list(command)
@@ -120,17 +129,21 @@ class DockerRunner:
 
     def remove(self, name):
         """Remove only the uniquely named container we created."""
-        result = subprocess.run(
-            self.command + ["rm", "-f", name],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-
-        if result.returncode and "No such container" not in result.stderr:
-            raise RunnerError(
-                "Could not confirm container cleanup: " + result.stderr[:400]
-            )
+        for attempt in range(2):
+            try:
+                result = subprocess.run(self.command + ["rm", "-f", name],
+                                        capture_output=True, text=True, timeout=10)
+            except subprocess.TimeoutExpired as error:
+                if attempt == 0:
+                    continue  # Removal may already have completed on the daemon.
+                raise RunnerError('Could not confirm container cleanup after two attempts.') from error
+            if not result.returncode:
+                return True
+            if 'No such container' in result.stderr:
+                return False
+            if attempt == 0 and 'removal of container' in result.stderr and 'in progress' in result.stderr:
+                continue
+            raise RunnerError('Could not confirm container cleanup: ' + result.stderr[:400])
 
     def run(self, source, entrypoint, args):
         """Execute one function call with bounded input and output."""
@@ -143,16 +156,9 @@ class DockerRunner:
         if not isinstance(args, list):
             raise RunnerError("Test arguments must be a list.")
 
-        payload = json.dumps(
-            {
-                "source": source,
-                "entrypoint": entrypoint,
-                "args": args,
-            },
-            allow_nan=False,
-        ).encode()
+        payload = json.dumps(self.request_payload(source, entrypoint, args), allow_nan=False).encode() + b'\n'
 
-        if len(payload) > 32000:
+        if len(payload) > self.payload_limit:
             raise RunnerError("Submission and test inputs exceed the prototype limit.")
 
         name = "am-case-" + uuid.uuid4().hex
@@ -175,19 +181,19 @@ class DockerRunner:
             "--security-opt",
             "no-new-privileges=true",
             "--memory",
-            "128m",
+            self.memory,
             "--memory-swap",
-            "128m",
+            self.memory,
             "--cpus",
             "0.5",
             "--pids-limit",
-            "32",
+            self.pids,
             "--ulimit",
-            "nofile=64:64",
+            "nofile=" + self.nofile,
             "--ulimit",
-            "cpu=2:2",
+            "cpu=" + self.cpu_limit,
             "--tmpfs",
-            "/tmp:rw,noexec,nosuid,nodev,size=16m",
+            self.temporary_filesystem,
             "-i",
             self.image,
             "python",
@@ -195,7 +201,7 @@ class DockerRunner:
             "-B",
             "-u",
             "-c",
-            DRIVER,
+            self.driver,
         ]
 
         process = None
@@ -298,6 +304,8 @@ class DockerRunner:
                 "output_limit",
                 "syntax_error",
                 "runtime_error",
+                "compile_error",
+                "timeout",
             }
 
             if (
@@ -323,8 +331,9 @@ class DockerRunner:
                         pipe.close()
 
             # Stopping the Docker client alone doesn't stop its container.
+            removed = False
             try:
-                self.remove(name)
+                removed = self.remove(name)
 
             finally:
                 if process:
@@ -352,6 +361,13 @@ class DockerRunner:
                     for pipe in (process.stdin, process.stdout):
                         if pipe and not pipe.closed:
                             pipe.close()
+                if not removed:
+                    # A Docker create request can finish after an early rm saw no
+                    # container. Recheck after the client has exited or been killed.
+                    self.remove(name)
+
+    def request_payload(self, source, entrypoint, args):
+        return {"source": source, "entrypoint": entrypoint, "args": args}
 
 
 def grade_case(

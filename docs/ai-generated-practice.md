@@ -2,7 +2,7 @@
 
 ## Student workflow
 
-Choose Python, add a topic and optional notes, select a difficulty, and start a
+Choose an available language, add a topic and optional notes, select a difficulty, and start a
 session. One exercise is the default. During preparation the page shows drafting,
 review, and execution stages. On success the student gets a debugging task,
 requirements, an editor, progressive hints, test evidence, and a session summary.
@@ -15,7 +15,8 @@ The existing website layout, file reader, session navigation, and runner are reu
 1. The author receives the student's topic, notes, difficulty, and titles already
    used in the session. It returns structured exercise data, not terminal commands.
 2. Local validation bounds prose, code, JSON tests, function arity, and evidence.
-   AST parsing checks syntax without executing code on the host.
+   Python AST parsing checks syntax without executing code on the host. Java,
+   C, and C++ use typed calling contracts and compile only inside containers.
    Notes are divided into verbatim chunks of at most 600 characters. The model
    selects an `evidence_id` from the provided list; the application inserts the
    original source text. The output schema does not request model-written quotes.
@@ -72,6 +73,8 @@ performed, not a confidence score or a guarantee.
 ## Bounds and behavior
 
 Python synchronous functions with up to five positional arguments are supported.
+Java, C, and C++ function exercises are also available after compiler setup;
+their typed interfaces and limits are documented in [multilanguage practice](multilanguage-practice.md).
 Inputs and return values must be JSON-compatible. Tasks use small bounded inputs,
 no input mutation, external packages, files, networking, interactive input, or
 nondeterministic services. Each author supplies 3–8 cases, for 6–16 combined cases.

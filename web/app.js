@@ -10,7 +10,8 @@ let session = null;
 let selectedLanguage = "python";
 let lastRun = null;
 let generationMode = false;
-const labels = {passed: "Passed", failed: "Incorrect result", timeout: "Time limit",
+const languageLabels = {python: "Python", java: "Java", c: "C", cpp: "C++"};
+const labels = {compile_error: "Compiler error", passed: "Passed", failed: "Incorrect result", timeout: "Time limit",
   output_limit: "Output limit", syntax_error: "Syntax error", runtime_error: "Runtime error",
   execution_error: "Execution stopped", protocol_error: "Invalid execution response"};
 
@@ -75,6 +76,10 @@ function renderSession(view) {
   $("constraints").replaceChildren(); $("skills").replaceChildren();
   for (const text of lesson.constraints) addText($("constraints"), "li", text);
   for (const text of lesson.skills) addText($("skills"), "span", text, "skill");
+  $("editor-language").textContent = `${languageLabels[lesson.language] || lesson.language} · ${lesson.language === "java" ? "Solution class" : "function submission"}`;
+  $("signature-details").hidden = !lesson.required_signature;
+  $("required-signature").textContent = lesson.required_signature || "";
+  $("signature-help").textContent = lesson.language === "java" ? "Submit a public class named Solution containing this public static method. The runner supplies main." : lesson.language === "c" ? "Submit the function without main. An array parameter uses a pointer and a separate length." : "Submit this free function without main. Standard headers are provided; additional standard includes are allowed.";
   $("source").value = lesson.starter_code;
   $("focus-evidence").hidden = false; $("focus-evidence").open = false;
   $("focus-reason").textContent = view.plan.reason;
@@ -91,10 +96,11 @@ function renderResults(result) {
   for (const test of result.results) {
     const details = document.createElement("details"); details.className = "test"; details.open = test.status !== "passed";
     addText(details, "summary", `${labels[test.status] || test.status} · ${test.name}`, test.status === "passed" ? "pass" : "fail");
+    addText(details, "pre", `Input arguments (JSON): ${test.args_json ?? JSON.stringify(test.args)}`);
     if (test.status === "passed" || test.status === "failed") {
-      addText(details, "pre", `Expected return: ${JSON.stringify(test.expected)}\nActual return:   ${JSON.stringify(test.actual)}`);
+      addText(details, "pre", `Expected return: ${test.expected_json ?? JSON.stringify(test.expected)}\nActual return:   ${test.actual_json ?? JSON.stringify(test.actual)}`);
       if (test.input_modified) addText(details, "p", "The input was modified; this lesson forbids that.", "result-message");
-    } else { addText(details, "p", test.message || "Execution did not return a result.", "result-message"); }
+    } else { addText(details, test.status === "compile_error" || test.status === "runtime_error" ? "pre" : "p", test.message || "Execution did not return a result.", "result-message"); }
     if (test.output) addText(details, "pre", "Printed output:\n" + test.output);
     $("test-list").append(details);
   }
@@ -189,19 +195,23 @@ fetch("/api/setup").then(async (response) => {
   if (!response.ok) throw new Error("Could not load practice options.");
   const setup = await response.json();
   for (const language of setup.languages) {
-    const button = addText($("languages"), "button", language.label + (language.available ? "" : " · planned"), "language");
-    button.type = "button"; button.disabled = !language.available;
+    const button = addText($("languages"), "button", language.label + (language.available ? "" : setup.mode === "ai-generated" ? " · setup needed" : " · AI mode"), "language");
+    button.type = "button"; button.disabled = !language.available; button.title = language.disabled_reason || "";
     button.dataset.available = String(language.available); button.setAttribute("aria-pressed", String(language.id === selectedLanguage));
     button.addEventListener("click", () => {
       selectedLanguage = language.id;
+      $("planner-label").textContent = setup.planner_label.replace(/^AI-authored Python exercises/, `AI-authored ${language.label} exercises`);
       document.querySelectorAll(".language").forEach((other) => { other.setAttribute("aria-pressed", "false"); });
       button.setAttribute("aria-pressed", "true");
     });
   }
   generationMode = setup.mode === "ai-generated";
-  $("mode-title").textContent = generationMode ? "AI-GENERATED PRACTICE · PYTHON FIRST" : "REVIEWED TEMPLATE PRACTICE";
+  $("mode-title").textContent = generationMode ? "AI-GENERATED PRACTICE" : "REVIEWED TEMPLATE PRACTICE";
   $("family-list").textContent = generationMode ? "Questions built around your topic and notes" : setup.families.map((family) => family.title).join(" · ");
   $("mode-description").textContent = generationMode ? "AM drafts a debugging question. A separate review solves it independently, then both solutions must pass the combined tests. Start with one exercise. Notes guide the question; web research is not enabled." : "Available families use reviewed generators with execution checks. Other topics need AI-generated mode.";
+  const missingRuntime = setup.mode === "ai-generated" && setup.languages.some((language) => !language.available);
+  $("runtime-setup").hidden = !missingRuntime;
+  $("runtime-setup").textContent = missingRuntime ? "To enable Java, C, and C++: run sudo -v, then python tools/setup_compiled_runtime.py in your terminal, and restart this app." : "";
   $("planner-label").textContent = setup.planner_label;
   $("loading").hidden = true; screen("setup"); setBusy(false);
 }).catch((error) => { $("loading").hidden = true; showError(error.message); });

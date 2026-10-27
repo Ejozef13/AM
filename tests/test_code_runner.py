@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 import unittest
+import subprocess
+from unittest.mock import Mock, patch
 
 from code_runner import DockerRunner, equivalent, grade_case
 
@@ -17,6 +19,14 @@ class ComparisonTests(unittest.TestCase):
         self.assertFalse(equivalent(1.0, 1))
         self.assertTrue(equivalent({"a": [1]}, {"a": [1]}))
 
+    def test_cleanup_retries_the_same_container_after_daemon_timeout(self):
+        runner = DockerRunner('python@sha256:' + 'a' * 64, command=('docker',))
+        with patch('code_runner.subprocess.run', side_effect=[
+                subprocess.TimeoutExpired(['docker'], 10), Mock(returncode=1, stderr='No such container: am-case-test')]) as run:
+            self.assertFalse(runner.remove('am-case-test'))
+        self.assertEqual(run.call_count, 2)
+        self.assertTrue(all(call.args[0] == ['docker', 'rm', '-f', 'am-case-test'] for call in run.call_args_list))
+
 
 @unittest.skipUnless(
     RUN_DOCKER,
@@ -30,7 +40,8 @@ class ContainerTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.runner = DockerRunner(self.image)
+        command = ('docker',) if os.environ.get('AM_DOCKER_DIRECT') == '1' else ('sudo', '-n', 'docker')
+        self.runner = DockerRunner(self.image, command=command)
 
     def test_correct_return(self):
         result = grade_case(
@@ -106,6 +117,7 @@ class ContainerTests(unittest.TestCase):
     def test_wall_timeout(self):
         runner = DockerRunner(
             self.image,
+            command=self.runner.command,
             wall_seconds=2,
         )
         result = runner.run(

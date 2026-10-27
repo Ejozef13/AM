@@ -46,9 +46,11 @@ class SessionStore:
         self.prune()
         if len(self.sessions) >= 24:
             raise ValueError("Too many open sessions. Finish a session or restart this local app.")
-        topic, notes, count, difficulty = study_input(data)
+        allowed = tuple(self.generator.runtimes) if self.generator is not None and hasattr(self.generator, 'runtimes') else ('python',)
+        topic, notes, count, difficulty = study_input(data, allowed)
         if self.generator is not None:
-            lessons, plan, label = self.generator.build(topic, notes, difficulty, count)
+            generator = self.generator.for_language(data['language']) if hasattr(self.generator, 'for_language') else self.generator
+            lessons, plan, label = generator.build(topic, notes, difficulty, count)
             return self.publish(lessons, plan, label)
         plan = self.planner.plan(topic, notes)
         lessons = [generate_lesson(plan["family"], difficulty, secrets.randbits(32)) for _ in range(count)]

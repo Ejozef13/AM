@@ -73,6 +73,7 @@ class PracticeWebTests(unittest.TestCase):
         self.assertTrue(result["complete"])
         self.assertEqual(self.runner.run.call_count, 8)
         self.assertEqual(self.runner.run.call_args_list[0].args[2], [[3, 8, 2]])
+        self.assertEqual(result["results"][0]["args"], [[3, 8, 2]])
 
     def test_syntax_error_is_a_test_result(self):
         self.runner.run.side_effect = None
@@ -82,6 +83,35 @@ class PracticeWebTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["passed"], 0)
         self.assertEqual(result["results"][0]["status"], "syntax_error")
+        self.assertEqual(result["results"][0]["args"], [[3, 8, 2]])
+
+    def test_result_inputs_distinguish_empty_strings_quotes_and_newlines(self):
+        inputs = ["", "''", "\n", r"\n"]
+        self.lesson["tests"] = [
+            {"name": f"Source {i}: empty string", "args": [value], "expected": value == value[::-1]}
+            for i, value in enumerate(inputs)]
+        self.runner.run.side_effect = lambda source, entrypoint, args: {
+            "status": "ok", "value": args[0] == args[0][:-1][::-1], "args_after": args}
+        status, raw, _ = self.request("/api/run", {"source": "fixture starter"})
+        self.assertEqual(status, 200)
+        results = json.loads(raw)["results"]
+        self.assertEqual([result["args"] for result in results], [[value] for value in inputs])
+        self.assertEqual(results[0]["status"], "passed")
+        self.assertEqual(results[1]["status"], "failed")
+
+    def test_result_inputs_do_not_alias_authored_tests(self):
+        result = self.app.run("fixture submission")
+        result["results"][0]["args"][0].append(999)
+        self.assertEqual(self.lesson["tests"][0]["args"], [[3, 8, 2]])
+
+    def test_display_evidence_preserves_large_integers_and_float_types(self):
+        self.lesson['tests'] = [{'name':'precision', 'args':[2**63-1], 'expected':1.0}]
+        self.runner.run.side_effect = lambda source, entrypoint, args: {'status':'ok','value':1,'args_after':args}
+        result = self.app.run('fixture')['results'][0]
+        self.assertEqual(result['args_json'], '[9223372036854775807]')
+        self.assertEqual(result['expected_json'], '1.0')
+        self.assertEqual(result['actual_json'], '1')
+        self.assertEqual(result['status'], 'failed')
 
     def test_infrastructure_failure_produces_no_grade(self):
         self.runner.run.side_effect = RunnerError("sudo unavailable")

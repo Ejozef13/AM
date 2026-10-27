@@ -43,7 +43,7 @@ class AuthorTemplateRunner:
 
 
 class PlannerTests(unittest.TestCase):
-    def test_input_rejects_unimplemented_languages(self):
+    def test_input_rejects_languages_without_an_available_runtime(self):
         for language in ("java", "c", "cpp"):
             with self.assertRaises(ValueError):
                 study_input(INPUT | {"language": language})

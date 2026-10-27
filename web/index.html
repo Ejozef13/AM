@@ -13,7 +13,7 @@
     <p id="loading" role="status" aria-live="polite">Loading practice options…</p>
     <section id="setup" class="card setup-card" hidden aria-labelledby="setup-title">
       <h2 id="setup-title">Pick your focus</h2>
-      <p class="field-label" id="language-label">Language</p><div id="languages" class="languages" role="group" aria-labelledby="language-label"></div>
+      <p class="field-label" id="language-label">Language</p><div id="languages" class="languages" role="group" aria-labelledby="language-label"></div><p id="runtime-setup" class="muted" hidden></p>
       <form id="setup-form">
         <label for="topic">What would you like to practice?</label><input id="topic" maxlength="160" placeholder="e.g. loops, recursion, strings, or searching">
         <label for="notes">Your notes <span class="muted">optional · up to 12,000 characters</span></label>
@@ -30,14 +30,14 @@
     <div id="workspace" class="workspace" hidden>
       <section class="card lesson" aria-labelledby="title">
         <p class="eyebrow">YOUR TASK</p><h2 id="title"></h2><p id="instructions"></p>
-        <h3>Requirements</h3><ul id="constraints"></ul>
+        <h3>Requirements</h3><ul id="constraints"></ul><section id="signature-details" hidden><h3>Required interface</h3><pre id="required-signature" class="signature-box"></pre><p id="signature-help" class="muted"></p></section>
         <div id="skills" class="skills"></div><p id="quality-note" class="muted"></p>
         <details id="focus-evidence" hidden><summary>Why this focus?</summary><p id="focus-reason" class="muted"></p><blockquote id="notes-quote"></blockquote><p class="muted">This excerpt matched your notes. That confirms its origin, not the accuracy of AM's interpretation.</p></details>
         <section class="hints"><h3>Need a nudge?</h3><p id="hint-description">Reveal one hint at a time when you need it.</p><ol id="hints"></ol><button id="hint" type="button" class="secondary">Show first hint</button></section>
       </section>
       <section class="card coding" aria-label="Code editor and results">
         <div class="section-top"><label for="source">Your solution</label><button id="reset" class="text-button" type="button">Reset starter</button></div>
-        <div class="editor-label">Python · function submission</div>
+        <div id="editor-language" class="editor-label">Python · function submission</div>
         <textarea id="source" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="editor-help"></textarea>
         <p id="editor-help" class="muted">Tab inserts four spaces. Ctrl+Enter or ⌘+Enter runs tests. Edits stay in this tab and are not saved.</p>
         <div class="run-bar"><button id="run" class="primary" type="button">Run tests <span aria-hidden="true">→</span></button><span id="activity" role="status" aria-live="polite"></span></div>

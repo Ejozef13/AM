@@ -1,6 +1,7 @@
 """Local browser lesson backed by the existing Docker runner. No AI grading."""
 
 import argparse
+from copy import deepcopy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -11,6 +12,7 @@ from code_runner import DockerRunner, RunnerError, grade_case
 from am_core import AMError
 from ai_exercises import OllamaExerciseGenerator
 from generation_diagnostics import DiagnosticRecorder
+from compiled_runner import CompiledRunner
 from exercise_families import CATALOG
 from practice_planner import LANGUAGES, KeywordPlanner, OllamaPlanner
 from practice_sessions import SessionStore
@@ -20,9 +22,10 @@ ROOT = Path(__file__).resolve().parent
 
 
 class PracticeApp:
-    def __init__(self, lesson, runner, planner=None, generator=None):
+    def __init__(self, lesson, runner, planner=None, generator=None, runtimes=None):
         self.lesson = lesson
         self.runner = runner
+        self.runtimes = runtimes or {'python': runner}
         self.busy = threading.Lock()
         self.sessions = SessionStore(planner or OllamaPlanner(), runner, generator)
         self.progress = "Ready"
@@ -39,6 +42,7 @@ class PracticeApp:
                 "constraints", "skills", "starter_code")
         lesson = self.lesson if lesson is None else lesson
         return {**{key: lesson[key] for key in keys},
+                **({"required_signature": lesson['required_signature']} if 'required_signature' in lesson else {}),
                 "quality": {key: lesson["quality"][key] for key in
                             ("source", "separate_review", "distinct_models", "reference_runs")}
                            | {"review_test_repairs": lesson["quality"].get("review_test_repairs", 0)}
@@ -57,10 +61,22 @@ class PracticeApp:
         if session_data is not None:
             _, session = self.sessions.get(session_data)
             lesson = session.lessons[session.index]
-        results = [grade_case(
-            self.runner, source, lesson["entrypoint"], case,
-            lesson["grading"]["forbid_input_mutation"],
-        ) for case in lesson["tests"]]
+        runner = self.runner
+        if lesson['language'] != 'python':
+            if lesson['language'] not in self.runtimes:
+                raise RunnerError('Compiler runtime is not configured.')
+            runner = self.runtimes[lesson['language']].with_signature(lesson['signature'])
+        results = []
+        for case in lesson["tests"]:
+            # Keep the authored input as evidence even on errors or input mutation.
+            arguments = deepcopy(case["args"])
+            result = grade_case(runner, source, lesson["entrypoint"], case,
+                                lesson["grading"]["forbid_input_mutation"])
+            evidence = {"args": arguments, "args_json": json.dumps(arguments, ensure_ascii=False)}
+            for key in ('expected', 'actual'):
+                if key in result:
+                    evidence[key + '_json'] = json.dumps(result[key], ensure_ascii=False)
+            results.append({**result, **evidence})
         response = {"results": results, "passed": sum(r["status"] == "passed" for r in results),
                     "total": len(results), "complete": True}
         if session is not None:
@@ -105,7 +121,12 @@ def make_server(app, port=8090):
                 return
             if self.path == "/api/setup":
                 generator = app.sessions.generator
-                self.reply(200, {"languages": LANGUAGES, "families": CATALOG,
+                languages = []
+                for language in LANGUAGES:
+                    available = language['id'] == 'python' or (generator is not None and language['id'] in app.runtimes)
+                    languages.append({**language, 'available': available,
+                        'disabled_reason': '' if available else ('AI-generated mode required' if not generator else 'Compiler runtime setup required')})
+                self.reply(200, {"languages": languages, "families": CATALOG,
                                  "mode": "ai-generated" if generator else "templates",
                                  "planner_label": generator.label if generator else app.sessions.planner.label})
                 return
@@ -220,16 +241,32 @@ def main():
         # Fail early if Docker or its local pinned image is unavailable.
         subprocess.run([*command, "image", "inspect", image], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        runtimes = {'python': runner}
+        compiled_pin = ROOT / '.am-runtime/compiled-image.txt'
+        if compiled_pin.exists():
+            try:
+                compiled_image = compiled_pin.read_text().strip()
+                # Validate the immutable local ID before passing it to Docker.
+                candidates = {language: CompiledRunner(compiled_image, language, command=command)
+                              for language in ('java', 'c', 'cpp')}
+                subprocess.run([*command, 'image', 'inspect', compiled_image], check=True,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+                runtimes.update(candidates)
+            except (ValueError, OSError, RunnerError, subprocess.SubprocessError):
+                print('Compiler runtime unavailable. Run: python tools/setup_compiled_runtime.py', flush=True)
         planner = KeywordPlanner() if args.offline else OllamaPlanner(args.model)
         generator = None if args.offline or args.templates else OllamaExerciseGenerator(
             runner, args.model, args.review_model,
-            diagnostics=DiagnosticRecorder(ROOT / ".am-diagnostics") if args.diagnostics else None)
-        server = make_server(PracticeApp(lesson, runner, planner, generator), args.port)
+            diagnostics=DiagnosticRecorder(ROOT / ".am-diagnostics") if args.diagnostics else None,
+            runtimes=runtimes)
+        server = make_server(PracticeApp(lesson, runner, planner, generator, runtimes), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)
     print("No AI grading. Keep this terminal open; Ctrl+C stops the app.", flush=True)
     print(generator.label if generator else planner.label, flush=True)
+    print('Languages ready: ' + ', '.join(language['label'] for language in LANGUAGES
+          if language['id'] == 'python' or (generator and language['id'] in runtimes)), flush=True)
     if args.diagnostics:
         print("Diagnostics enabled: rejected generated code/tests will be saved locally to "
               f"{ROOT / '.am-diagnostics/last-generation.json'}. Inspect before sharing.", flush=True)

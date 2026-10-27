@@ -13,9 +13,9 @@ LANGUAGES = [
 ]
 
 
-def study_input(data):
-    if data.get("language") != "python":
-        raise ValueError("Only Python has a runner and reviewed families in this version.")
+def study_input(data, allowed_languages=('python',)):
+    if data.get("language") not in allowed_languages:
+        raise ValueError("This language is not available in the current mode. Set up its runtime and use AI-generated mode.")
     topic, notes = data.get("topic", ""), data.get("notes", "")
     if not isinstance(topic, str) or len(topic) > 160:
         raise ValueError("Keep the topic below 160 characters.")
