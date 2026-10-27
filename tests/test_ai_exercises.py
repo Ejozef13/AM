@@ -121,6 +121,49 @@ class GeneratedTests(unittest.TestCase):
         self.assertEqual(retry["format"]["properties"]["constraints"]["maxItems"], 6)
         self.assertIn("7 items", json.loads(retry["messages"][1]["content"])["previous_failure"])
         self.assertIn("1–6", retry["messages"][0]["content"])
+        self.assertEqual(json.loads(retry["messages"][1]["content"])["previous_draft"], bad)
+
+    def test_entrypoint_metadata_is_derived_without_rewriting_code(self):
+        for supplied in ("factorial(n)", "def factorial(n):", "`factorial`", " factorial ", "A factorial function", None):
+            with self.subTest(supplied=supplied):
+                raw = draft() | {"entrypoint": supplied}
+                lesson = validate_draft(raw, NOTES, "standard")
+                self.assertEqual(lesson["entrypoint"], "factorial")
+                self.assertEqual(lesson["starter_code"], STARTER)
+                self.assertEqual(lesson["reference_solution"], REFERENCE)
+
+    def test_ambiguous_entrypoint_reports_actual_metadata_and_definitions(self):
+        raw = draft() | {"entrypoint": "not a name",
+                         "starter_code": STARTER + "\ndef helper(): return 0\n",
+                         "reference_solution": REFERENCE + "\ndef helper(): return 0\n"}
+        with self.assertRaises(DraftRejected) as caught:
+            validate_draft(raw, NOTES, "standard")
+        self.assertIn("not a name", str(caught.exception))
+        self.assertIn("starter definitions=['factorial', 'helper']", str(caught.exception))
+
+    def test_mismatched_entrypoint_definitions_are_not_guessed(self):
+        raw = draft() | {"entrypoint": "factorial(n)", "starter_code": "def other(n): return 0"}
+        with self.assertRaises(DraftRejected):
+            validate_draft(raw, NOTES, "standard")
+
+    def test_signature_style_metadata_completes_review_and_execution(self):
+        raw = draft() | {"entrypoint": "factorial(n)"}
+        with patch("ai_exercises.api", side_effect=[response(raw), response(review())]) as api:
+            lessons, _, _ = self.build()
+        self.assertEqual(lessons[0]["entrypoint"], "factorial")
+        reviewer_input = json.loads(api.call_args_list[1].args[1]["messages"][1]["content"])
+        self.assertEqual(reviewer_input["exercise"]["entrypoint"], "factorial")
+
+    def test_optional_diagnostics_exclude_full_notes_and_source(self):
+        events = []
+        self.generator.diagnostics = events.append
+        raw = draft() | {"constraints": []}
+        with patch("ai_exercises.api", side_effect=[response(raw), response(draft()), response(review())]):
+            self.build()
+        self.assertEqual(events[0]["lists"]["constraints"]["count"], 0)
+        self.assertEqual(events[0]["author_functions"], ["factorial"])
+        self.assertNotIn("notes", events[0])
+        self.assertNotIn(REFERENCE, events[0].values())
 
     def test_signature_errors_identify_role_and_exact_unsupported_feature(self):
         for source, feature in (
@@ -192,7 +235,7 @@ class GeneratedTests(unittest.TestCase):
 
     def test_malformed_evidence_and_json_are_rejected_before_execution(self):
         for change in ({"notes_quote": "invented quote"}, {"starter_code": "bad syntax !"},
-                       {"hints": []}, {"entrypoint": "not valid"}, {"tests": []}):
+                       {"hints": []}, {"tests": []}):
             with self.subTest(change=change), self.assertRaises(DraftRejected):
                 validate_draft(draft() | change, NOTES, "standard")
         for encoded in ("NaN", "Infinity", "[" * 20 + "0" + "]" * 20):

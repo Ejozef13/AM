@@ -36,6 +36,9 @@ DRAFT_SCHEMA = object_schema({
        for name, limit in TEXT_LIMITS.items()},
     **{name: STRINGS for name in LIST_FIELDS}, "tests": TESTS_SCHEMA,
 })
+DRAFT_SCHEMA["properties"]["entrypoint"].update(
+    pattern="^[A-Za-z_][A-Za-z0-9_]*$",
+    description="Bare Python function name only, e.g. is_palindrome; no def, parentheses, spaces, or Markdown.")
 REVIEW_SCHEMA = object_schema({
     "approved": {"type": "boolean"}, "feedback": string_schema(1200),
     "reference_solution": string_schema(TEXT_LIMITS["reference_solution"]), "tests": TESTS_SCHEMA,
@@ -132,10 +135,40 @@ def source_contract(source, entrypoint, role="source"):
     return len(fn.args.posonlyargs) + len(fn.args.args)
 
 
+def defined_functions(source):
+    """Inspect definitions without evaluating source or metadata."""
+    if not isinstance(source, str) or len(source) > TEXT_LIMITS["reference_solution"]:
+        return []
+    try:
+        return [node.name for node in ast.parse(source).body if isinstance(node, ast.FunctionDef)]
+    except (SyntaxError, ValueError, RecursionError):
+        return []
+
+
+def resolve_entrypoint(raw):
+    """Derive metadata from code when both artifacts identify one shared function.
+
+    Do not rename functions, rewrite code, or choose among ambiguous definitions.
+    Reference, review, and container validation still apply after this recovery.
+    """
+    supplied = raw.get("entrypoint")
+    starter = defined_functions(raw.get("starter_code"))
+    reference = defined_functions(raw.get("reference_solution"))
+    if (isinstance(supplied, str) and supplied.isidentifier() and not keyword.iskeyword(supplied)
+            and supplied in starter and supplied in reference):
+        return supplied
+    if len(starter) == len(reference) == 1 and starter == reference:
+        return starter[0]
+    raise DraftRejected(f"Cannot identify the exercise function: entrypoint={str(supplied)[:100]!r}; "
+                        f"starter definitions={starter[:5]!r}; solution definitions={reference[:5]!r}. "
+                        "Provide the same bare function name in entrypoint, starter, and solution; "
+                        "for example entrypoint='is_palindrome', not 'is_palindrome(s)'.")
+
+
 def validate_draft(raw, notes, difficulty):
     if not isinstance(raw, dict):
         raise DraftRejected("Expected a structured exercise object.")
-    for field in ("title", "instructions", "entrypoint", "focus", "reason"):
+    for field in ("title", "instructions", "focus", "reason"):
         text(raw.get(field), field, TEXT_LIMITS[field])
     for field in LIST_FIELDS:
         values = raw.get(field)
@@ -152,9 +185,7 @@ def validate_draft(raw, notes, difficulty):
         raise DraftRejected("Evidence must quote 8–600 characters verbatim from the supplied notes.")
     if not notes and quote:
         raise DraftRejected("Do not invent notes evidence when no notes were supplied.")
-    entrypoint = raw["entrypoint"]
-    if not entrypoint.isidentifier():
-        raise DraftRejected("Invalid function name.")
+    entrypoint = resolve_entrypoint(raw)
     arity = source_contract(raw.get("reference_solution"), entrypoint, "author solution")
     if source_contract(raw.get("starter_code"), entrypoint, "starter") != arity:
         raise DraftRejected("Starter and solution must have the same positional arity.")
@@ -162,7 +193,8 @@ def validate_draft(raw, notes, difficulty):
     if any(len(case["args"]) != arity for case in tests):
         raise DraftRejected("Tests must supply every positional argument.")
     lesson = {key: raw[key] for key in ("title", "instructions", "constraints", "skills",
-              "entrypoint", "starter_code", "reference_solution", "hints")}
+              "starter_code", "reference_solution", "hints")}
+    lesson["entrypoint"] = entrypoint
     lesson.update(schema_version=1, id="ai-python-" + uuid.uuid4().hex, language="python",
                   kind="debugging", difficulty=difficulty, tests=tests,
                   grading={"forbid_input_mutation": True},
@@ -177,10 +209,11 @@ def validate_draft(raw, notes, difficulty):
 class OllamaExerciseGenerator:
     mode = "ai-generated"
 
-    def __init__(self, runner, model="am-study:latest", review_model=None, progress=None):
+    def __init__(self, runner, model="am-study:latest", review_model=None, progress=None, diagnostics=None):
         self.runner, self.model = runner, model
         self.review_model = review_model or model
         self.progress = progress or (lambda message: None)
+        self.diagnostics = diagnostics or (lambda event: None)
         reviewer = ("a separate review call to the same model" if self.review_model == model
                     else f"a separate review model ({self.review_model})")
         self.label = f"AI-authored exercises · {reviewer} · execution-checked, not proven correct."
@@ -209,7 +242,9 @@ class OllamaExerciseGenerator:
         lessons = []
         for number in range(count):
             failure = ""
+            previous_draft = None
             for attempt in range(2):
+                raw, review = None, None
                 try:
                     self.progress(f"Exercise {number + 1}/{count}: AM is drafting a question (attempt {attempt + 1}/2)…")
                     raw = self.ask(self.model,
@@ -220,6 +255,9 @@ class OllamaExerciseGenerator:
                         "constraints, skills, and hints must EACH be a JSON array of 1–6 nonempty strings, "
                         "with at most 600 characters per string. Combine related requirements rather than exceeding six. "
                         "Follow every field's minLength/maxLength and minItems/maxItems in the output schema. "
+                        "entrypoint is only the bare function name, e.g. is_palindrome, not is_palindrome(s). "
+                        "If previous_draft is provided, repair that draft using previous_failure; preserve valid fields "
+                        "and the task instead of inventing a replacement question. "
                         "Use one plain synchronous function taking up to five positional arguments and returning JSON data. "
                         + FUNCTION_FORMAT +
                         "No input mutation, files, networking, packages, interaction, randomness, or external services. "
@@ -228,7 +266,8 @@ class OllamaExerciseGenerator:
                         "With notes, quote 8–600 characters verbatim in notes_quote and explain relevance; otherwise quote empty. "
                         "Match the requested difficulty and avoid previously used tasks. Do not claim web research or certainty.",
                         {"topic": topic, "notes": notes, "difficulty": difficulty,
-                         "previous_tasks": [lesson["title"] for lesson in lessons], "previous_failure": failure}, DRAFT_SCHEMA)
+                         "previous_tasks": [lesson["title"] for lesson in lessons], "previous_failure": failure,
+                         "previous_draft": previous_draft}, DRAFT_SCHEMA)
                     lesson = validate_draft(raw, notes, difficulty)
                     self.progress(f"Exercise {number + 1}/{count}: a separate review is solving and checking the question…")
                     # Deliberately exclude author's solution AND tests, so the reviewer
@@ -269,6 +308,16 @@ class OllamaExerciseGenerator:
                     break
                 except DraftRejected as error:
                     failure = str(error)[:1400]
+                    self.diagnostics({"exercise": number + 1, "attempt": attempt + 1,
+                        "error": failure, "entrypoint": str(raw.get("entrypoint"))[:160] if isinstance(raw, dict) else None,
+                        "lists": {name: {"type": type(raw.get(name)).__name__,
+                            "count": len(raw[name]) if isinstance(raw.get(name), list) else None}
+                            for name in LIST_FIELDS} if isinstance(raw, dict) else {},
+                        "starter_functions": defined_functions(raw.get("starter_code")) if isinstance(raw, dict) else [],
+                        "author_functions": defined_functions(raw.get("reference_solution")) if isinstance(raw, dict) else [],
+                        "reviewer_functions": defined_functions(review.get("reference_solution")) if isinstance(review, dict) else []})
+                    if isinstance(raw, dict) and len(json.dumps(raw)) <= 24000:
+                        previous_draft = raw
             else:
                 raise AMError(f"Exercise {number + 1} did not pass preparation after two drafts: {failure} "
                               "No session was created.")

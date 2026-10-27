@@ -120,3 +120,25 @@ and oversized lists, schema limits, and recovery from a seven-constraint draft.
 The post-fix suite ran 77 tests: 65 passed and 12 optional Docker tests skipped.
 These checks simulate model responses; the same desktop request still needs
 retesting with live Ollama.
+
+The next desktop rejection reported an invalid function name, but did not show
+the returned name. The entrypoint schema now explicitly requests a bare Python
+identifier. When both starter and reference define exactly one top-level function
+with the same name, the app can derive entrypoint metadata from those ASTs. This
+recovers signature-style labels without changing source. Different definitions
+or ambiguous multiple definitions require repair instead of guessing. All review
+and execution checks still run afterward. Retries receive the prior draft (up to
+24,000 serialized characters) and failure feedback to repair its fields.
+
+For a desktop troubleshooting run, use `python practice_web.py --diagnostics`.
+Rejected attempts print the reported entrypoint, function names, list types/counts,
+and rejection reason to the launch terminal. The diagnostic event does not include
+full source or full notes, although execution-error reasons may contain individual
+test inputs/results. Inspect it before sharing. This is opt-in and does not save a
+diagnostic file. Normal launches do not print these details.
+
+The entrypoint update passed 70 tests, with 12 optional Docker tests skipped (82
+total). Checks include metadata recovery without code changes, ambiguous and
+mismatched definitions, repair context, diagnostic fields, and a complete simulated
+author/reviewer workflow with a signature-style entrypoint. Live model generation
+has still not been verified in this workspace.

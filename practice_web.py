@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import subprocess
+import sys
 import threading
 
 from code_runner import DockerRunner, RunnerError, grade_case
@@ -203,6 +204,8 @@ def main():
     parser.add_argument("--templates", action="store_true", help="Use the previous reviewed-template mode")
     parser.add_argument("--model", default="am-study:latest", help="Local Ollama author model")
     parser.add_argument("--review-model", help="Optional installed Ollama reviewer model; defaults to a separate call to the author model")
+    parser.add_argument("--diagnostics", action="store_true",
+                        help="Print rejected-draft details to the terminal for troubleshooting")
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("Port must be between 0 and 65535.")
@@ -216,7 +219,9 @@ def main():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
         planner = KeywordPlanner() if args.offline else OllamaPlanner(args.model)
         generator = None if args.offline or args.templates else OllamaExerciseGenerator(
-            runner, args.model, args.review_model)
+            runner, args.model, args.review_model,
+            diagnostics=(lambda event: print("AM draft diagnostic: " + json.dumps(event),
+                                             file=sys.stderr, flush=True)) if args.diagnostics else None)
         server = make_server(PracticeApp(lesson, runner, planner, generator), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
