@@ -27,10 +27,11 @@ LIST_FIELDS = ("constraints", "skills", "hints")
 LIST_MIN, LIST_MAX, ITEM_LIMIT = 1, 6, 600
 STRINGS = {"type": "array", "items": string_schema(ITEM_LIMIT),
            "minItems": LIST_MIN, "maxItems": LIST_MAX}
-# Values travel as JSON strings because the function contract permits nested
-# heterogeneous JSON values. They are decoded and bounded before execution.
-CASE_SCHEMA = object_schema({"name": string_schema(100), "args_json": string_schema(4000),
-                             "expected_json": string_schema(4000)})
+# Keep test values as JSON values, not JSON encoded a second time inside strings.
+# Nested types and sizes are still checked locally before container execution.
+CASE_SCHEMA = object_schema({"name": string_schema(100),
+    "args": {"type": "array", "minItems": 0, "maxItems": 5, "items": {}},
+    "expected": {}})
 TESTS_SCHEMA = {"type": "array", "items": CASE_SCHEMA, "minItems": 3, "maxItems": 8}
 DRAFT_SCHEMA = object_schema({
     **{name: string_schema(limit) for name, limit in TEXT_LIMITS.items()},
@@ -100,14 +101,20 @@ def cases(raw, prefix):
             raise DraftRejected("Invalid test object.")
         name = text(case.get("name"), "test name", 100)
         try:
-            args = json.loads(text(case.get("args_json"), "test arguments", 4000))
-            expected = json.loads(text(case.get("expected_json"), "test expected value", 4000))
+            # Legacy JSON-string fields remain readable for existing fixtures.
+            args = case["args"] if "args" in case else json.loads(text(case.get("args_json"), "test arguments", 4000))
+            expected = case["expected"] if "expected" in case else json.loads(text(case.get("expected_json"), "test expected value", 4000))
             # Reject NaN/Infinity, which Python's decoder otherwise accepts.
             json.dumps([args, expected], allow_nan=False)
         except (ValueError, TypeError, RecursionError) as error:
             raise DraftRejected("Test values must be finite JSON.") from error
         if not isinstance(args, list) or len(args) > 5:
-            raise DraftRejected("Each test needs at most five positional arguments.")
+            received = f"{len(args)} arguments" if isinstance(args, list) else type(args).__name__
+            raise DraftRejected(f"{prefix} test {index + 1} ({name}): args must be a positional-argument array "
+                                f"of at most five elements; received {received}. For one string input use "
+                                "args=[\"level\"], not args=\"level\" or a list of its characters.")
+        if len(json.dumps(args)) > 4000 or len(json.dumps(expected)) > 4000:
+            raise DraftRejected(f"{prefix} test {index + 1} exceeds the 4,000-character test-value limit.")
         json_value(args); json_value(expected)
         result.append({"name": f"{prefix} {index + 1}: {name}", "args": args, "expected": expected})
     return result
@@ -121,14 +128,23 @@ FUNCTION_FORMAT = (
 )
 
 
-def source_contract(source, entrypoint, role="source"):
+def parse_source(source, role):
     text(source, "Python source", TEXT_LIMITS["reference_solution"])
     if len(source.encode("utf-8")) > 16000:
         raise DraftRejected("Python source exceeds runner limits.")
     try:
         tree = ast.parse(source)
-    except (SyntaxError, ValueError, RecursionError) as error:
-        raise DraftRejected("Python source did not parse.") from error
+    except SyntaxError as error:
+        line = (error.text or "").rstrip()[:160]
+        raise DraftRejected(f"{role} Python syntax error at line {error.lineno}, column {error.offset}: "
+                            f"{error.msg}; source line={line!r}. Return plain Python source, without Markdown fences.") from error
+    except (ValueError, RecursionError) as error:
+        raise DraftRejected(f"{role} Python source could not be parsed: {type(error).__name__}.") from error
+    return tree
+
+
+def source_contract(source, entrypoint, role="source"):
+    tree = parse_source(source, role)
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == entrypoint]
     if len(functions) != 1 or keyword.iskeyword(entrypoint):
         raise DraftRejected("Define the named function exactly once.")
@@ -205,6 +221,8 @@ def validate_draft(raw, notes, difficulty):
         raise DraftRejected("Evidence must contain an original excerpt from the supplied notes.")
     if not notes and quote:
         raise DraftRejected("Do not invent notes evidence when no notes were supplied.")
+    parse_source(raw.get("starter_code"), "starter")
+    parse_source(raw.get("reference_solution"), "author solution")
     entrypoint = resolve_entrypoint(raw)
     arity = source_contract(raw.get("reference_solution"), entrypoint, "author solution")
     if source_contract(raw.get("starter_code"), entrypoint, "starter") != arity:
@@ -260,6 +278,7 @@ class OllamaExerciseGenerator:
 
     def build(self, topic, notes, difficulty, count):
         lessons = []
+        run_id = uuid.uuid4().hex
         excerpts = note_excerpts(notes)
         schema = deepcopy(DRAFT_SCHEMA)
         schema["properties"]["evidence_id"]["enum"] = list(excerpts) if excerpts else [""]
@@ -285,7 +304,10 @@ class OllamaExerciseGenerator:
                         + FUNCTION_FORMAT +
                         "No input mutation, files, networking, packages, interaction, randomness, or external services. "
                         "Use small bounded inputs. Supply 3–8 tests including boundaries and a case exposing the bug. "
-                        "Encode each args_json as a JSON array of positional arguments; expected_json is the JSON return. "
+                        "Use native JSON fields args and expected. args is an array of positional arguments: "
+                        "for a function taking one string use args=[\"level\"], and for one list use args=[[1,2,3]]. "
+                        "expected is the JSON return value, e.g. true or 6. Do not encode JSON inside strings. "
+                        "Source fields contain plain Python with actual newline characters, not Markdown fences. "
                         "Select evidence_id from the supplied note_excerpts IDs to support this task; "
                         "explain relevance in reason. Do not copy or generate a notes_quote field. "
                         "If no notes were supplied, evidence_id must be the empty string. "
@@ -303,7 +325,9 @@ class OllamaExerciseGenerator:
                         "Reject ambiguous requirements, incorrect hints, irrelevant tasks, invalid constraints, or a starter with no logic bug. "
                         "You have not been given the author's solution or tests. Derive your own solution from the specification "
                         "and supply 3–8 independently expected test cases including boundaries and adversarial inputs. "
-                        "Use args_json (JSON positional argument array) and expected_json (JSON return value). "
+                        "Use native JSON args (positional argument array) and expected (return value). "
+                        "For one string input use args=[\"level\"]; for one list input use args=[[1,2,3]]. "
+                        "Do not encode JSON inside strings. Return plain Python source without Markdown fences. "
                         "Use the exact entrypoint and signature, no input mutation or external resources. "
                         + FUNCTION_FORMAT +
                         "Set approved=false with actionable feedback if the exercise cannot be supported. "
@@ -333,7 +357,7 @@ class OllamaExerciseGenerator:
                     break
                 except DraftRejected as error:
                     failure = str(error)[:1400]
-                    self.diagnostics({"exercise": number + 1, "attempt": attempt + 1,
+                    self.diagnostics({"run_id": run_id, "exercise": number + 1, "attempt": attempt + 1,
                         "error": failure, "entrypoint": str(raw.get("entrypoint"))[:160] if isinstance(raw, dict) else None,
                         "evidence_id": str(raw.get("evidence_id"))[:80] if isinstance(raw, dict) else None,
                         "lists": {name: {"type": type(raw.get(name)).__name__,
@@ -341,7 +365,12 @@ class OllamaExerciseGenerator:
                             for name in LIST_FIELDS} if isinstance(raw, dict) else {},
                         "starter_functions": defined_functions(raw.get("starter_code")) if isinstance(raw, dict) else [],
                         "author_functions": defined_functions(raw.get("reference_solution")) if isinstance(raw, dict) else [],
-                        "reviewer_functions": defined_functions(review.get("reference_solution")) if isinstance(review, dict) else []})
+                        "reviewer_functions": defined_functions(review.get("reference_solution")) if isinstance(review, dict) else [],
+                        "artifacts": {
+                            "draft": {key: raw[key] for key in DRAFT_SCHEMA["properties"] if key in raw}
+                                     if isinstance(raw, dict) else None,
+                            "review": {key: review[key] for key in REVIEW_SCHEMA["properties"] if key in review}
+                                      if isinstance(review, dict) else None}})
                     if isinstance(raw, dict) and len(json.dumps(raw)) <= 24000:
                         previous_draft = raw
             else:

@@ -5,12 +5,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import subprocess
-import sys
 import threading
 
 from code_runner import DockerRunner, RunnerError, grade_case
 from am_core import AMError
 from ai_exercises import OllamaExerciseGenerator
+from generation_diagnostics import DiagnosticRecorder
 from exercise_families import CATALOG
 from practice_planner import LANGUAGES, KeywordPlanner, OllamaPlanner
 from practice_sessions import SessionStore
@@ -205,7 +205,7 @@ def main():
     parser.add_argument("--model", default="am-study:latest", help="Local Ollama author model")
     parser.add_argument("--review-model", help="Optional installed Ollama reviewer model; defaults to a separate call to the author model")
     parser.add_argument("--diagnostics", action="store_true",
-                        help="Print rejected-draft details to the terminal for troubleshooting")
+                        help="Print rejection details and save generated drafts/reviews to .am-diagnostics/last-generation.json")
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("Port must be between 0 and 65535.")
@@ -220,14 +220,16 @@ def main():
         planner = KeywordPlanner() if args.offline else OllamaPlanner(args.model)
         generator = None if args.offline or args.templates else OllamaExerciseGenerator(
             runner, args.model, args.review_model,
-            diagnostics=(lambda event: print("AM draft diagnostic: " + json.dumps(event),
-                                             file=sys.stderr, flush=True)) if args.diagnostics else None)
+            diagnostics=DiagnosticRecorder(ROOT / ".am-diagnostics") if args.diagnostics else None)
         server = make_server(PracticeApp(lesson, runner, planner, generator), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)
     print("No AI grading. Keep this terminal open; Ctrl+C stops the app.", flush=True)
     print(generator.label if generator else planner.label, flush=True)
+    if args.diagnostics:
+        print("Diagnostics enabled: rejected generated code/tests will be saved locally to "
+              f"{ROOT / '.am-diagnostics/last-generation.json'}. Inspect before sharing.", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

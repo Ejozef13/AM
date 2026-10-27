@@ -29,7 +29,11 @@ The existing website layout, file reader, session navigation, and runner are reu
    connection/infrastructure failure aborts immediately. No partial session is
    published if any requested exercise cannot pass preparation.
 
-Tests are data: positional arguments and expected JSON returns. They cannot
+Tests are data: native JSON positional `args` arrays and `expected` return values.
+For one string parameter use `args: ["level"]`; for one list use `args: [[1,2,3]]`.
+The model no longer needs to serialize JSON a second time inside string fields.
+Legacy `args_json`/`expected_json` fields remain readable for prior fixtures.
+Tests cannot
 supply host-side assertions, shell commands, checker code, or override grading.
 Only `code_runner.py` determines pass/fail using host-side comparisons. Expected
 answers remain outside submission globals. All model references and starter code
@@ -139,10 +143,16 @@ and execution checks still run afterward. Retries receive the prior draft (up to
 
 For a desktop troubleshooting run, use `python practice_web.py --diagnostics`.
 Rejected attempts print the reported entrypoint, function names, list types/counts,
-and rejection reason to the launch terminal. The diagnostic event does not include
-full source or full notes, although execution-error reasons may contain individual
-test inputs/results. Inspect it before sharing. This is opt-in and does not save a
-diagnostic file. Normal launches do not print these details.
+and rejection reason to the launch terminal. Diagnostic mode also writes generated
+draft/reviewer artifacts to `.am-diagnostics/last-generation.json` for reproduction.
+The folder is Git-ignored; newly created folders/files are owner-only. The file
+holds up to ten rejected attempts from the most recent failed generation run,
+and is overwritten on the next failed run. It includes generated code, test data,
+and explanations, which may reflect private course material. It does not include
+the original notes field. Inspect it before sharing and delete it when finished.
+The next successful run does not clear an older failure trace; check its run ID.
+Normal launches do not create this file. A failure to save diagnostics does not
+replace the actual generation error. Terminal summaries exclude full artifacts.
 
 The entrypoint update passed 70 tests, with 12 optional Docker tests skipped (82
 total). Checks include metadata recovery without code changes, ambiguous and
@@ -157,3 +167,15 @@ the original excerpt or block an otherwise valid draft, that multiline/Unicode
 notes retain their exact text, and that empty/short notes and invalid IDs behave
 explicitly. These tests simulate model responses; live desktop generation is
 still the remaining end-to-end check.
+
+Further desktop diagnostics showed invalid positional arguments in one attempt
+and a Python parse failure in the next. Tests now travel as native JSON values,
+and argument errors report which author/test, the actual type/count, and an input
+shape example. Syntax errors identify starter/author/reviewer, line, column,
+Python's error message, and the offending line. Full rejected artifacts can now
+be collected via diagnostic mode rather than trying to infer their contents from
+generic screenshots. The workspace suite passed 80 tests with 12 opt-in Docker
+tests skipped (92 total), including native test-value round trips, nested inputs,
+syntax-error capture, and trace-file permissions/retention. A live desktop trace
+is still needed if generation continues to fail; simulated tests do not establish
+the cause of that model's actual syntax error.

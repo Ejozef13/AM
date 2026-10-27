@@ -169,6 +169,11 @@ A failed generated draft never silently becomes a template question. Each
 exercise gets at most two drafts; if preparation fails, no partial session is
 published. Original runner commands and exercises remain available.
 
+For troubleshooting, launch with `--diagnostics`. Rejected generated code and
+tests are saved locally to `.am-diagnostics/last-generation.json` (Git-ignored,
+owner-only on creation). Inspect its generated content before sharing it. Normal
+launches do not save this trace. Syntax errors now report the code role and line.
+
 ```bash
 python -m unittest discover -s tests -v
 ```

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from ai_exercises import (DRAFT_SCHEMA, REVIEW_SCHEMA, DraftRejected, OllamaExerciseGenerator,
-                          bind_evidence, note_excerpts, source_contract, validate_draft)
+                          bind_evidence, cases, note_excerpts, source_contract, validate_draft)
 from am_core import AMError
 from code_runner import RunnerError
 from practice_planner import KeywordPlanner
@@ -82,6 +82,43 @@ class GeneratedTests(unittest.TestCase):
         self.assertNotIn("tests", exercise)
         self.assertNotIn("tools", payload)
         self.assertEqual(plan["notes_quote"], NOTES)
+
+    def test_native_json_test_values_complete_generation(self):
+        authored, checked = draft(), review()
+        for payload in (authored, checked):
+            payload["tests"] = [{"name": case["name"], "args": json.loads(case["args_json"]),
+                                 "expected": json.loads(case["expected_json"])} for case in payload["tests"]]
+        with patch("ai_exercises.api", side_effect=[response(authored), response(checked)]) as api:
+            lessons, _, _ = self.build()
+        self.assertEqual(len(lessons[0]["tests"]), 6)
+        for call in api.call_args_list:
+            properties = call.args[1]["format"]["properties"]["tests"]["items"]["properties"]
+            self.assertEqual(properties["args"]["type"], "array")
+            self.assertEqual(properties["args"]["maxItems"], 5)
+            self.assertIn("expected", properties)
+            self.assertNotIn("args_json", properties)
+
+    def test_native_argument_nesting_and_invalid_argument_diagnostics(self):
+        raw = [{"name": "string", "args": ["level"], "expected": True},
+               {"name": "list", "args": [[1, 2, 3]], "expected": 6},
+               {"name": "object", "args": [{"key": ["value"]}], "expected": None}]
+        parsed = cases(raw, "Review")
+        self.assertEqual(parsed[0]["args"], ["level"])
+        self.assertEqual(parsed[1]["args"], [[1, 2, 3]])
+        for value, diagnostic in (("level", "received str"), (list("python"), "received 6 arguments")):
+            with self.subTest(value=value), self.assertRaises(DraftRejected) as caught:
+                cases([raw[0] | {"args": value}] + raw[1:], "Review")
+            self.assertIn("Review test 1", str(caught.exception))
+            self.assertIn(diagnostic, str(caught.exception))
+
+    def test_syntax_diagnostic_identifies_role_line_and_preserves_artifact(self):
+        bad = review() | {"reference_solution": "```python\n" + REVIEWER + "```"}
+        events = []; self.generator.diagnostics = events.append
+        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad)] * 2):
+            with self.assertRaisesRegex(AMError, "reviewer solution Python syntax error at line 1"):
+                self.build()
+        self.assertEqual(events[0]["artifacts"]["review"]["reference_solution"], bad["reference_solution"])
+        self.assertIn("```python", events[0]["error"])
 
     def test_generated_quote_cannot_block_or_replace_original_evidence(self):
         raw = draft() | {"notes_quote": "A model paraphrase that is not present in the notes."}
