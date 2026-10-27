@@ -174,8 +174,9 @@ def make_server(app, port=8090):
             except ValueError as error:
                 self.reply(400, {"error": str(error)})
             except AMError as error:
-                self.reply(503, {"error": f"AM could not prepare this session: {error} "
-                            "No session was created. Check Ollama or try a focused topic."})
+                detail = str(error)
+                suffix = "" if "No session was created" in detail else " No session was created."
+                self.reply(503, {"error": f"AM could not prepare this session: {detail}{suffix}"})
             except (RunnerError, OSError, subprocess.SubprocessError):
                 self.reply(503, {"error": "Exercise validation or execution could not complete. "
                             "No new session or overall grade was published. "

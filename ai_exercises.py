@@ -80,7 +80,15 @@ def cases(raw, prefix):
     return result
 
 
-def source_contract(source, entrypoint):
+FUNCTION_FORMAT = (
+    "Define a top-level synchronous function, e.g. def solve(value):. "
+    "Use zero to five explicitly named positional parameters, with the same signature in starter and solution. "
+    "Do not use decorators (including @staticmethod), classes, *args, **kwargs, or keyword-only parameters. "
+    "Type annotations are allowed. The runner calls function(*args), not function(**kwargs). "
+)
+
+
+def source_contract(source, entrypoint, role="source"):
     text(source, "Python source", 8000)
     if len(source.encode("utf-8")) > 16000:
         raise DraftRejected("Python source exceeds runner limits.")
@@ -92,8 +100,23 @@ def source_contract(source, entrypoint):
     if len(functions) != 1 or keyword.iskeyword(entrypoint):
         raise DraftRejected("Define the named function exactly once.")
     fn = functions[0]
-    if fn.decorator_list or fn.args.vararg or fn.args.kwarg or fn.args.kwonlyargs:
-        raise DraftRejected("Use a plain function with positional arguments.")
+    problems = []
+    if fn.decorator_list:
+        problems.append("decorators: " + ", ".join(ast.unparse(node)[:80] for node in fn.decorator_list))
+    if fn.args.vararg:
+        problems.append("*" + fn.args.vararg.arg)
+    if fn.args.kwarg:
+        problems.append("**" + fn.args.kwarg.arg)
+    # Optional keyword-only settings do not prevent positional calls. Required
+    # keyword-only inputs cannot be supplied by our positional JSON protocol.
+    required_keywords = [arg.arg for arg, default in zip(fn.args.kwonlyargs, fn.args.kw_defaults)
+                         if default is None]
+    if required_keywords:
+        problems.append("required keyword-only parameters: " + ", ".join(required_keywords))
+    if problems:
+        signature = f"def {entrypoint}({ast.unparse(fn.args)}):"[:300]
+        raise DraftRejected(f"Unsupported {role} function signature {signature} "
+                            f"({'; '.join(problems)}). " + FUNCTION_FORMAT)
     # This limits the exercise format, not a security sandbox. All source still
     # executes only inside the restricted container, including model references.
     return len(fn.args.posonlyargs) + len(fn.args.args)
@@ -121,8 +144,8 @@ def validate_draft(raw, notes, difficulty):
     entrypoint = raw["entrypoint"]
     if not entrypoint.isidentifier():
         raise DraftRejected("Invalid function name.")
-    arity = source_contract(raw.get("reference_solution"), entrypoint)
-    if source_contract(raw.get("starter_code"), entrypoint) != arity:
+    arity = source_contract(raw.get("reference_solution"), entrypoint, "author solution")
+    if source_contract(raw.get("starter_code"), entrypoint, "starter") != arity:
         raise DraftRejected("Starter and solution must have the same positional arity.")
     tests = cases(raw.get("tests"), "Draft")
     if any(len(case["args"]) != arity for case in tests):
@@ -184,6 +207,7 @@ class OllamaExerciseGenerator:
                         "Provide an unambiguous task with explicit valid inputs, return value, edge-case behavior, "
                         "a syntactically valid starter with a logic bug, correct reference, and progressive hints. "
                         "Use one plain synchronous function taking up to five positional arguments and returning JSON data. "
+                        + FUNCTION_FORMAT +
                         "No input mutation, files, networking, packages, interaction, randomness, or external services. "
                         "Use small bounded inputs. Supply 3–8 tests including boundaries and a case exposing the bug. "
                         "Encode each args_json as a JSON array of positional arguments; expected_json is the JSON return. "
@@ -203,6 +227,7 @@ class OllamaExerciseGenerator:
                         "and supply 3–8 independently expected test cases including boundaries and adversarial inputs. "
                         "Use args_json (JSON positional argument array) and expected_json (JSON return value). "
                         "Use the exact entrypoint and signature, no input mutation or external resources. "
+                        + FUNCTION_FORMAT +
                         "Set approved=false with actionable feedback if the exercise cannot be supported. "
                         "An exact quote alone does not establish relevance. Do not claim universal correctness.",
                         {"topic": topic, "notes": notes, "exercise": {key: lesson[key] for key in
@@ -214,7 +239,7 @@ class OllamaExerciseGenerator:
                     if not review["approved"]:
                         raise DraftRejected("Reviewer rejected the draft: " + feedback)
                     reviewer_source = review.get("reference_solution")
-                    arity = source_contract(reviewer_source, lesson["entrypoint"])
+                    arity = source_contract(reviewer_source, lesson["entrypoint"], "reviewer solution")
                     reviewer_cases = cases(review.get("tests"), "Review")
                     if arity != source_contract(lesson["reference_solution"], lesson["entrypoint"]) or any(
                             len(case["args"]) != arity for case in reviewer_cases):
@@ -232,7 +257,7 @@ class OllamaExerciseGenerator:
                     failure = str(error)[:1400]
             else:
                 raise AMError(f"Exercise {number + 1} did not pass preparation after two drafts: {failure} "
-                              "No session was created. Try a narrower topic or shorter notes.")
+                              "No session was created.")
         return lessons, lessons[0]["focus_plan"], self.label
 
     def check_execution(self, lesson, reviewer_source):

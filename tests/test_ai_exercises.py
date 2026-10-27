@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ai_exercises import DraftRejected, OllamaExerciseGenerator, validate_draft
+from ai_exercises import DraftRejected, OllamaExerciseGenerator, source_contract, validate_draft
 from am_core import AMError
 from code_runner import RunnerError
 from practice_planner import KeywordPlanner
@@ -87,6 +87,39 @@ class GeneratedTests(unittest.TestCase):
             lessons, _, _ = self.build()
         self.assertEqual(api.call_args_list[1].args[1]["model"], "other-installed-model")
         self.assertTrue(lessons[0]["quality"]["distinct_models"])
+
+    def test_signature_errors_identify_role_and_exact_unsupported_feature(self):
+        for source, feature in (
+                ("@staticmethod\ndef factorial(n): return 1", "decorators: staticmethod"),
+                ("def factorial(*, n): return 1", "required keyword-only parameters: n"),
+                ("def factorial(*numbers): return 1", "*numbers"),
+                ("def factorial(**options): return 1", "**options")):
+            with self.subTest(source=source), self.assertRaises(DraftRejected) as caught:
+                source_contract(source, "factorial", "reviewer solution")
+            self.assertIn("reviewer solution", str(caught.exception))
+            self.assertIn(feature, str(caught.exception))
+            self.assertIn("def factorial(", str(caught.exception))
+
+    def test_callable_positional_signatures_are_accepted(self):
+        for signature in ("n", "n: int", "n, /", "n=0", "n, *, debug=False"):
+            with self.subTest(signature=signature):
+                self.assertEqual(source_contract(f"def factorial({signature}): return 1", "factorial"), 1)
+
+    def test_bad_signature_retry_receives_actionable_feedback(self):
+        bad = draft() | {"reference_solution": "def factorial(*, n): return 1"}
+        with patch("ai_exercises.api", side_effect=[response(bad), response(draft()), response(review())]) as api:
+            self.assertEqual(len(self.build()[0]), 1)
+        retry = json.loads(api.call_args_list[1].args[1]["messages"][1]["content"])
+        self.assertIn("author solution", retry["previous_failure"])
+        self.assertIn("required keyword-only parameters: n", retry["previous_failure"])
+        for call in (api.call_args_list[0], api.call_args_list[2]):
+            self.assertIn("Do not use decorators", call.args[1]["messages"][0]["content"])
+
+    def test_reviewer_signature_error_survives_to_final_diagnostic(self):
+        bad = review() | {"reference_solution": "@staticmethod\n" + REVIEWER}
+        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad)] * 2):
+            with self.assertRaisesRegex(AMError, "reviewer solution.*decorators: staticmethod"):
+                self.build()
 
     def test_disagreement_retries_then_rejects(self):
         bad = review(); bad["tests"][0]["expected_json"] = "123"

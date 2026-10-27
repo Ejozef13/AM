@@ -99,3 +99,14 @@ were no browser JavaScript errors. One leftover container in `created` state
 was manually removed after server shutdown; automatic cleanup during Docker
 startup races needs follow-up. No test containers remained afterward. No live Ollama
 model was available in this workspace, so live generation remains a desktop check.
+
+The first desktop palindrome run was rejected by the signature-format check;
+the original message did not identify which signature feature triggered it.
+Author and reviewer instructions now explicitly forbid decorators, variadic
+parameters, and required keyword-only inputs. Diagnostics identify the code's
+role, signature, and unsupported feature and feed that information into the retry.
+The validator accepts optional keyword-only settings because positional calls
+can omit them. Required keyword-only inputs remain unsupported. Type annotations,
+positional-only parameters, and positional defaults continue to work. The HTTP
+error no longer repeats the failure or suggests changing valid notes for a
+format error. Regression tests cover these signature forms and retry behavior.

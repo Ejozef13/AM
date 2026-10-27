@@ -209,6 +209,15 @@ class SessionHttpTests(unittest.TestCase):
         self.assertIn("No session was created", result["error"])
         self.assertFalse(self.app.sessions.sessions)
 
+    def test_preparation_error_is_not_duplicated_or_blames_notes(self):
+        self.app.sessions.planner = Mock()
+        self.app.sessions.planner.plan.side_effect = AMError(
+            "Unsupported reviewer solution function signature. No session was created.")
+        status, result = self.request("/api/session", INPUT)
+        self.assertEqual(status, 503)
+        self.assertEqual(result["error"].count("No session was created"), 1)
+        self.assertNotIn("focused topic", result["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
