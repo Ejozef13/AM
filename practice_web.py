@@ -8,38 +8,54 @@ import subprocess
 import threading
 
 from code_runner import DockerRunner, RunnerError, grade_case
+from am_core import AMError
+from exercise_families import CATALOG
+from practice_planner import LANGUAGES, KeywordPlanner, OllamaPlanner
+from practice_sessions import SessionStore
 from run_submission import load_lesson
 
 ROOT = Path(__file__).resolve().parent
 
 
 class PracticeApp:
-    def __init__(self, lesson, runner):
+    def __init__(self, lesson, runner, planner=None):
         self.lesson = lesson
         self.runner = runner
         self.busy = threading.Lock()
+        self.sessions = SessionStore(planner or OllamaPlanner(), runner)
 
-    def public_lesson(self):
+    def public_lesson(self, lesson=None):
         # Explicit allowlist: reference solution, hints and answer keys stay off
         # the initial response. Hints are disclosed only when requested.
         keys = ("id", "title", "language", "difficulty", "instructions",
                 "constraints", "skills", "starter_code")
-        return {**{key: self.lesson[key] for key in keys},
-                "test_count": len(self.lesson["tests"]),
-                "hint_count": len(self.lesson["hints"])}
+        lesson = self.lesson if lesson is None else lesson
+        return {**{key: lesson[key] for key in keys},
+                "test_count": len(lesson["tests"]),
+                "hint_count": len(lesson["hints"])}
 
-    def run(self, source):
+    def run(self, source, session_data=None):
         # Source is passed only to the container, never exec'd on the host.
         if not isinstance(source, str) or not source.strip():
             raise ValueError("Enter some Python code first.")
         if len(source.encode("utf-8")) > 16000:
             raise ValueError("Keep the submission below 16,000 UTF-8 bytes.")
+        session = None
+        lesson = self.lesson
+        if session_data is not None:
+            _, session = self.sessions.get(session_data)
+            lesson = session.lessons[session.index]
         results = [grade_case(
-            self.runner, source, self.lesson["entrypoint"], case,
-            self.lesson["grading"]["forbid_input_mutation"],
-        ) for case in self.lesson["tests"]]
-        return {"results": results, "passed": sum(r["status"] == "passed" for r in results),
-                "total": len(results), "complete": True}
+            self.runner, source, lesson["entrypoint"], case,
+            lesson["grading"]["forbid_input_mutation"],
+        ) for case in lesson["tests"]]
+        response = {"results": results, "passed": sum(r["status"] == "passed" for r in results),
+                    "total": len(results), "complete": True}
+        if session is not None:
+            previous = session.attempts.get(session.index, {}).get("attempts", 0)
+            session.attempts[session.index] = {"attempts": previous + 1,
+                                              "passed": response["passed"]}
+        return response
 
 
 def make_server(app, port=8090):
@@ -75,6 +91,10 @@ def make_server(app, port=8090):
             if self.path == "/api/lesson":
                 self.reply(200, app.public_lesson())
                 return
+            if self.path == "/api/setup":
+                self.reply(200, {"languages": LANGUAGES, "families": CATALOG,
+                                 "planner_label": app.sessions.planner.label})
+                return
             assets = {"/": ("index.html", "text/html; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                       "/app.css": ("app.css", "text/css; charset=utf-8")}
@@ -92,7 +112,8 @@ def make_server(app, port=8090):
             }:
                 self.reply(403, {"error": "Run requests must originate from this local app."})
                 return
-            if self.path not in {"/api/run", "/api/hint"}:
+            if self.path not in {"/api/run", "/api/hint", "/api/session",
+                                  "/api/session/next", "/api/session/finish"}:
                 self.reply(404, {"error": "Not found."})
                 return
             if (self.headers.get("Content-Type", "").split(";")[0] != "application/json"
@@ -110,24 +131,38 @@ def make_server(app, port=8090):
             except (ValueError, UnicodeError):
                 self.reply(400, {"error": "Invalid JSON request."})
                 return
-            if self.path == "/api/hint":
-                index = data.get("index")
-                hints = app.lesson["hints"]
-                if type(index) is not int or not 0 <= index < len(hints):
-                    self.reply(400, {"error": "No hint at that position."})
-                else:
-                    self.reply(200, {"index": index, "hint": hints[index]})
-                return
-            # One active grading job per server. Do not queue unlimited Docker work.
+            # One active planning/grading job per server. Do not queue unlimited work.
             if not app.busy.acquire(blocking=False):
-                self.reply(429, {"error": "A test run is already active. Wait for it to finish."})
+                self.reply(429, {"error": "An operation is already active. Wait for it to finish."})
                 return
             try:
-                self.reply(200, app.run(data.get("source")))
+                if self.path == "/api/session":
+                    key, session = app.sessions.create(data)
+                    self.reply(201, app.sessions.view(key, session, app.public_lesson))
+                elif self.path == "/api/session/next":
+                    self.reply(200, app.sessions.next(data, app.public_lesson))
+                elif self.path == "/api/session/finish":
+                    self.reply(200, app.sessions.finish(data))
+                elif self.path == "/api/hint":
+                    lesson = app.lesson
+                    if "session_id" in data:
+                        _, session = app.sessions.get(data)
+                        lesson = session.lessons[session.index]
+                    index = data.get("index")
+                    hints = lesson["hints"]
+                    if type(index) is not int or not 0 <= index < len(hints):
+                        raise ValueError("No hint at that position.")
+                    self.reply(200, {"index": index, "hint": hints[index]})
+                else:
+                    self.reply(200, app.run(data.get("source"), data if "session_id" in data else None))
             except ValueError as error:
                 self.reply(400, {"error": str(error)})
+            except AMError as error:
+                self.reply(503, {"error": f"AM could not plan this session: {error} "
+                            "No session was created. Check Ollama or use explicit offline mode."})
             except (RunnerError, OSError, subprocess.SubprocessError):
-                self.reply(503, {"error": "Runner unavailable; no overall grade was produced. "
+                self.reply(503, {"error": "Exercise validation or execution could not complete. "
+                            "No new session or overall grade was published. "
                             "Check Docker and sudo authorization in the launch terminal. "
                             "If needed, stop this server, run sudo -v, and restart it."})
             except Exception:
@@ -146,6 +181,8 @@ def main():
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--docker-direct", action="store_true",
                         help="Only use when already authorized to access Docker directly")
+    parser.add_argument("--offline", action="store_true", help="Use explicit keyword matching instead of AM planning")
+    parser.add_argument("--model", default="am-study:latest", help="Local Ollama model used only for focus planning")
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("Port must be between 0 and 65535.")
@@ -157,11 +194,13 @@ def main():
         # Fail early if Docker or its local pinned image is unavailable.
         subprocess.run([*command, "image", "inspect", image], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
-        server = make_server(PracticeApp(lesson, runner), args.port)
+        planner = KeywordPlanner() if args.offline else OllamaPlanner(args.model)
+        server = make_server(PracticeApp(lesson, runner, planner), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)
     print("No AI grading. Keep this terminal open; Ctrl+C stops the app.", flush=True)
+    print(planner.label, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

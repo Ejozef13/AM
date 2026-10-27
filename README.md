@@ -120,20 +120,28 @@ One successful run does not establish general accuracy or hardware limits.
 
 ## Coding-practice browser prototype
 
-The first Python debugging lesson now has a local browser editor, progressive
-reviewed hints, and results from the existing Docker runner. It does not use AI
-to grade submissions and does not modify the Ollama/Open WebUI deployment.
+The browser starts with "What are we studying today?" Choose Python, a topic,
+difficulty, and session length, then paste notes or add a small UTF-8 text,
+Markdown, or code file. Java, C, and C++ are shown as planned, not runnable.
+
+AM maps the study request to a reviewed family: minimum/maximum, counting, or
+first-index search. Python generators produce the exercise code, tests, and
+answer keys. Each generated reference is run through the Docker checker before
+publication, and a known regression must detect the starter bug. The AI never
+authors executable code or decides the test grade in this approach.
 
 From the project root:
 
 ```bash
 sudo -v
+python am.py on
 python practice_web.py
 ```
 
 Open `http://127.0.0.1:8090` in your desktop browser. Keep the launch terminal
-open. Run the starter to observe its two failing cases, request a hint, then
-repair it and run again. Ctrl+C stops the app and waits for active runner cleanup.
+open. Start a session, inspect the suggested focus, run the starter, request hints,
+and repair the code. Move between exercises and review the session summary.
+Ctrl+C stops the app and waits for active runner cleanup.
 Do not run the application server itself with sudo.
 
 The loopback-only prototype is for local practice, not public hostile-code
@@ -147,5 +155,15 @@ New HTTP tests do not require Docker:
 python -m unittest discover -s tests -p test_practice_web.py -v
 ```
 
-Next: add the remaining reviewed lessons and navigation, then ground AM's hints
-and explanations in actual test results. AI must not control the pass/fail grade.
+For explicit offline testing, run `python practice_web.py --offline`. This uses
+keyword matching, clearly labeled in the interface, with the same generated
+exercise validation and grading. It never silently replaces a failed model call.
+Use `--model` to select a different local Ollama model for planning.
+
+Notes guide family selection, not arbitrary syllabus coverage. Only three
+reviewed Python families are available. Uploaded code is never executed as notes.
+PDFs, slides, other execution languages, AI-generated hints, persistent progress,
+and unrestricted AI-invented problems are future milestones. A model's quoted
+excerpt is checked for exact presence, not semantic correctness.
+
+See [notes-guided-practice.md](docs/notes-guided-practice.md) for the new pipeline.

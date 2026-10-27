@@ -1,5 +1,8 @@
 # Browser lesson prototype
 
+This document records the original single-lesson milestone. For the current
+notes-guided setup and multi-exercise workflow, see [notes-guided practice](notes-guided-practice.md).
+
 ## Student workflow
 
 1. Read the largest-value debugging task and its requirements.
