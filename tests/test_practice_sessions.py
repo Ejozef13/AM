@@ -155,6 +155,28 @@ class SessionHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual([x["id"] for x in data["languages"] if x["available"]], ["python"])
 
+    def test_generated_session_routes_and_public_fields(self):
+        from ai_exercises import OllamaExerciseGenerator
+        from test_ai_exercises import FixtureRunner, NOTES, draft, review, response
+        self.app.runner = FixtureRunner()
+        generator = OllamaExerciseGenerator(self.app.runner)
+        self.app.sessions.generator = generator
+        status, setup = self.request("/api/setup")
+        self.assertEqual(setup["mode"], "ai-generated")
+        self.assertEqual(self.request("/api/progress")[1]["busy"], False)
+        with patch("ai_exercises.api", side_effect=[response(draft()), response(review())]):
+            status, view = self.request("/api/session", INPUT | {"topic": "factorial", "notes": NOTES, "count": 1})
+        self.assertEqual(status, 201)
+        self.assertEqual(view["lesson"]["quality"]["source"], "ai-generated")
+        for field in ("reference_solution", "tests", "hints", "review_feedback"):
+            self.assertNotIn(field, view["lesson"])
+        fields = {"session_id": view["session_id"], "lesson_index": 0}
+        self.assertEqual(self.request("/api/hint", fields | {"index": 0})[0], 200)
+        status, result = self.request("/api/run", fields | {"source": draft()["reference_solution"]})
+        self.assertEqual(result["passed"], 6)
+        status, summary = self.request("/api/session/next", fields)
+        self.assertEqual(summary["summary"]["completed"], 1)
+
     def test_complete_generated_workflow(self):
         status, view = self.request("/api/session", INPUT)
         self.assertEqual(status, 201)

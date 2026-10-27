@@ -15,13 +15,13 @@
       <h2 id="setup-title">Pick your focus</h2>
       <p class="field-label" id="language-label">Language</p><div id="languages" class="languages" role="group" aria-labelledby="language-label"></div>
       <form id="setup-form">
-        <label for="topic">What would you like to practice?</label><input id="topic" maxlength="160" placeholder="e.g. counting with loops, minimum values, linear search">
+        <label for="topic">What would you like to practice?</label><input id="topic" maxlength="160" placeholder="e.g. loops, recursion, strings, or searching">
         <label for="notes">Your notes <span class="muted">optional · up to 12,000 characters</span></label>
         <textarea id="notes" rows="6" maxlength="12000" placeholder="Paste the definitions, examples, or course excerpt you want to focus on."></textarea>
         <div class="upload-row"><label class="file-label" for="notes-file">Add a notes file</label><input id="notes-file" type="file" accept=".txt,.md,.markdown,.py,.java,.c,.cpp,.h,.hpp"><span id="file-status" class="muted"></span></div>
         <p class="muted">Text, Markdown, or code files only for now. Uploaded code is context, not executed. PDF and slides are planned.</p>
-        <div class="setup-options"><div><label for="difficulty">Difficulty</label><select id="difficulty"><option value="introductory">Introductory</option><option value="standard" selected>Standard</option><option value="challenging">Challenging</option></select></div><div><label for="count">Session length</label><select id="count"><option value="1">1 exercise</option><option value="2">2 exercises</option><option value="3" selected>3 exercises</option><option value="4">4 exercises</option><option value="5">5 exercises</option></select></div></div>
-        <div class="scope-note"><p class="eyebrow">AVAILABLE IN THIS FIRST VERSION</p><p id="family-list"></p><p class="muted">AM suggests a matching focus. Reviewed generators create the code and tests; the runner checks each reference before your session starts. Unsupported topics won't silently become unrelated questions.</p></div>
+        <div class="setup-options"><div><label for="difficulty">Difficulty</label><select id="difficulty"><option value="introductory">Introductory</option><option value="standard" selected>Standard</option><option value="challenging">Challenging</option></select></div><div><label for="count">Session length</label><select id="count"><option value="1" selected>1 exercise</option><option value="2">2 exercises</option><option value="3">3 exercises</option><option value="4">4 exercises</option><option value="5">5 exercises</option></select></div></div>
+        <div class="scope-note"><p class="eyebrow" id="mode-title">YOUR PRACTICE SESSION</p><p id="family-list"></p><p class="muted" id="mode-description"></p></div>
         <p id="planner-label" class="muted"></p>
         <div class="actions"><button id="start" type="submit" class="primary">Build my practice session →</button><button id="sample" type="button" class="text-button">Try sample notes</button></div>
       </form>
@@ -31,9 +31,9 @@
       <section class="card lesson" aria-labelledby="title">
         <p class="eyebrow">YOUR TASK</p><h2 id="title"></h2><p id="instructions"></p>
         <h3>Requirements</h3><ul id="constraints"></ul>
-        <div id="skills" class="skills"></div>
+        <div id="skills" class="skills"></div><p id="quality-note" class="muted"></p>
         <details id="focus-evidence" hidden><summary>Why this focus?</summary><p id="focus-reason" class="muted"></p><blockquote id="notes-quote"></blockquote><p class="muted">This excerpt matched your notes. That confirms its origin, not the accuracy of AM's interpretation.</p></details>
-        <section class="hints"><h3>Need a nudge?</h3><p>Hints are reviewed lesson content. Reveal one when you need it.</p><ol id="hints"></ol><button id="hint" type="button" class="secondary">Show first hint</button></section>
+        <section class="hints"><h3>Need a nudge?</h3><p id="hint-description">Reveal one hint at a time when you need it.</p><ol id="hints"></ol><button id="hint" type="button" class="secondary">Show first hint</button></section>
       </section>
       <section class="card coding" aria-label="Code editor and results">
         <div class="section-top"><label for="source">Your solution</label><button id="reset" class="text-button" type="button">Reset starter</button></div>
@@ -46,7 +46,7 @@
       </section>
     </div>
     <section id="session-summary" class="card summary-card" hidden><p class="eyebrow">SESSION FINISHED</p><h2>You made time to practice.</h2><p id="summary-count"></p><div id="summary-items"></div><button id="another-session" class="primary" type="button">Study something else →</button></section>
-    <footer>Test-based feedback · restricted local execution · no AI grading<br>Notes, editor drafts, and session progress are not saved to disk. Passing reviewed cases is not a proof for every input.</footer>
+    <footer>Test-based feedback · restricted local execution · no AI grading<br>Notes, editor drafts, and session progress are not saved to disk. Passing tests is not a proof for every input.</footer>
   </main>
 </body>
 </html>

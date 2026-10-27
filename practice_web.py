@@ -9,6 +9,7 @@ import threading
 
 from code_runner import DockerRunner, RunnerError, grade_case
 from am_core import AMError
+from ai_exercises import OllamaExerciseGenerator
 from exercise_families import CATALOG
 from practice_planner import LANGUAGES, KeywordPlanner, OllamaPlanner
 from practice_sessions import SessionStore
@@ -18,11 +19,17 @@ ROOT = Path(__file__).resolve().parent
 
 
 class PracticeApp:
-    def __init__(self, lesson, runner, planner=None):
+    def __init__(self, lesson, runner, planner=None, generator=None):
         self.lesson = lesson
         self.runner = runner
         self.busy = threading.Lock()
-        self.sessions = SessionStore(planner or OllamaPlanner(), runner)
+        self.sessions = SessionStore(planner or OllamaPlanner(), runner, generator)
+        self.progress = "Ready"
+        if generator is not None:
+            generator.progress = self.set_progress
+
+    def set_progress(self, message):
+        self.progress = message
 
     def public_lesson(self, lesson=None):
         # Explicit allowlist: reference solution, hints and answer keys stay off
@@ -31,6 +38,9 @@ class PracticeApp:
                 "constraints", "skills", "starter_code")
         lesson = self.lesson if lesson is None else lesson
         return {**{key: lesson[key] for key in keys},
+                "quality": {key: lesson["quality"][key] for key in
+                            ("source", "separate_review", "distinct_models", "reference_runs")}
+                           if "quality" in lesson else {"source": "reviewed-template"},
                 "test_count": len(lesson["tests"]),
                 "hint_count": len(lesson["hints"])}
 
@@ -92,8 +102,13 @@ def make_server(app, port=8090):
                 self.reply(200, app.public_lesson())
                 return
             if self.path == "/api/setup":
+                generator = app.sessions.generator
                 self.reply(200, {"languages": LANGUAGES, "families": CATALOG,
-                                 "planner_label": app.sessions.planner.label})
+                                 "mode": "ai-generated" if generator else "templates",
+                                 "planner_label": generator.label if generator else app.sessions.planner.label})
+                return
+            if self.path == "/api/progress":
+                self.reply(200, {"message": app.progress, "busy": app.busy.locked()})
                 return
             assets = {"/": ("index.html", "text/html; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -137,6 +152,7 @@ def make_server(app, port=8090):
                 return
             try:
                 if self.path == "/api/session":
+                    app.progress = "Preparing your practice session…"
                     key, session = app.sessions.create(data)
                     self.reply(201, app.sessions.view(key, session, app.public_lesson))
                 elif self.path == "/api/session/next":
@@ -158,8 +174,8 @@ def make_server(app, port=8090):
             except ValueError as error:
                 self.reply(400, {"error": str(error)})
             except AMError as error:
-                self.reply(503, {"error": f"AM could not plan this session: {error} "
-                            "No session was created. Check Ollama or use explicit offline mode."})
+                self.reply(503, {"error": f"AM could not prepare this session: {error} "
+                            "No session was created. Check Ollama or try a focused topic."})
             except (RunnerError, OSError, subprocess.SubprocessError):
                 self.reply(503, {"error": "Exercise validation or execution could not complete. "
                             "No new session or overall grade was published. "
@@ -168,6 +184,7 @@ def make_server(app, port=8090):
             except Exception:
                 self.reply(500, {"error": "Unexpected runner failure; no overall grade was produced."})
             finally:
+                app.progress = "Ready"
                 app.busy.release()
 
     # Non-daemon request threads allow active runner cleanup to finish at shutdown.
@@ -182,7 +199,9 @@ def main():
     parser.add_argument("--docker-direct", action="store_true",
                         help="Only use when already authorized to access Docker directly")
     parser.add_argument("--offline", action="store_true", help="Use explicit keyword matching instead of AM planning")
-    parser.add_argument("--model", default="am-study:latest", help="Local Ollama model used only for focus planning")
+    parser.add_argument("--templates", action="store_true", help="Use the previous reviewed-template mode")
+    parser.add_argument("--model", default="am-study:latest", help="Local Ollama author model")
+    parser.add_argument("--review-model", help="Optional installed Ollama reviewer model; defaults to a separate call to the author model")
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("Port must be between 0 and 65535.")
@@ -195,12 +214,14 @@ def main():
         subprocess.run([*command, "image", "inspect", image], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
         planner = KeywordPlanner() if args.offline else OllamaPlanner(args.model)
-        server = make_server(PracticeApp(lesson, runner, planner), args.port)
+        generator = None if args.offline or args.templates else OllamaExerciseGenerator(
+            runner, args.model, args.review_model)
+        server = make_server(PracticeApp(lesson, runner, planner, generator), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)
     print("No AI grading. Keep this terminal open; Ctrl+C stops the app.", flush=True)
-    print(planner.label, flush=True)
+    print(generator.label if generator else planner.label, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

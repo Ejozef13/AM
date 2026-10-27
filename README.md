@@ -118,52 +118,61 @@ Different models may use different tokenizers and reasoning settings.
 Generation throughput is not the same as end-to-end latency.
 One successful run does not establish general accuracy or hardware limits.
 
-## Coding-practice browser prototype
+## AI-generated coding practice
 
-The browser starts with "What are we studying today?" Choose Python, a topic,
-difficulty, and session length, then paste notes or add a small UTF-8 text,
-Markdown, or code file. Java, C, and C++ are shown as planned, not runnable.
-
-AM maps the study request to a reviewed family: minimum/maximum, counting, or
-first-index search. Python generators produce the exercise code, tests, and
-answer keys. Each generated reference is run through the Docker checker before
-publication, and a known regression must detect the starter bug. The AI never
-authors executable code or decides the test grade in this approach.
-
-From the project root:
+The browser starts with "What are we studying today?" Choose Python, enter a topic,
+and paste notes or add a small text/Markdown/code file. AM authors a debugging
+exercise, starter, solution, hints, and tests. A separate, blind review call derives
+another solution and more tests without seeing the author's solution or tests.
+Both solutions must pass the combined cases in the restricted Docker runner,
+and the starter must expose a logic bug before the exercise is published.
 
 ```bash
+sudo systemctl start docker
 sudo -v
 python am.py on
 python practice_web.py
 ```
 
-Open `http://127.0.0.1:8090` in your desktop browser. Keep the launch terminal
-open. Start a session, inspect the suggested focus, run the starter, request hints,
-and repair the code. Move between exercises and review the session summary.
-Ctrl+C stops the app and waits for active runner cleanup.
-Do not run the application server itself with sudo.
+Open `http://127.0.0.1:8090`. Start with one exercise; generation, review, and
+container checks can take several minutes. The page reports preparation stages.
+Practice, reveal hints, run tests, and review the session summary. Keep the
+terminal open; Ctrl+C stops the app. Do not launch the app itself as root.
 
-The loopback-only prototype is for local practice, not public hostile-code
-submissions. It stores neither editor drafts nor progress. If sudo authorization
-expires, stop the app, run `sudo -v`, and restart it. No passwordless sudo rule is
-required. See [browser-practice.md](docs/browser-practice.md) for design and checks.
-
-New HTTP tests do not require Docker:
+The author defaults to `am-study:latest`. The reviewer defaults to a separate call
+to that same model, which is **not independent evidence from a different model**.
+To use another already-installed model:
 
 ```bash
-python -m unittest discover -s tests -p test_practice_web.py -v
+python practice_web.py --model am-study:latest --review-model YOUR_INSTALLED_MODEL
 ```
 
-For explicit offline testing, run `python practice_web.py --offline`. This uses
-keyword matching, clearly labeled in the interface, with the same generated
-exercise validation and grading. It never silently replaces a failed model call.
-Use `--model` to select a different local Ollama model for planning.
+AI agreement and passing tests do not prove correctness. The runner determines
+student test results; no AI decides pass/fail. Model-authored code, like student
+code, executes only in restricted containers. This is a local prototype, not a
+public hostile-code service.
 
-Notes guide family selection, not arbitrary syllabus coverage. Only three
-reviewed Python families are available. Uploaded code is never executed as notes.
-PDFs, slides, other execution languages, AI-generated hints, persistent progress,
-and unrestricted AI-invented problems are future milestones. A model's quoted
-excerpt is checked for exact presence, not semantic correctness.
+Python function exercises work first. Java, C, C++, PDF/slides, persistent
+progress, web research, and document retrieval are not implemented. The provided
+notes are sent directly to local Ollama, with exact-quote provenance checks.
+There is no web search or automatic source verification in this milestone.
 
-See [notes-guided-practice.md](docs/notes-guided-practice.md) for the new pipeline.
+Previous template modes remain explicit options:
+
+```bash
+python practice_web.py --templates  # AM selects among reviewed families
+python practice_web.py --offline    # Keyword selection; no model calls
+```
+
+A failed generated draft never silently becomes a template question. Each
+exercise gets at most two drafts; if preparation fails, no partial session is
+published. Original runner commands and exercises remain available.
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+See [AI-generated practice](docs/ai-generated-practice.md) for the architecture,
+checks, limitations, and validation record. Earlier milestones are documented in
+[notes-guided practice](docs/notes-guided-practice.md) and
+[browser practice](docs/browser-practice.md).

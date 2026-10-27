@@ -1,5 +1,9 @@
 # Notes-guided practice: approach one
 
+This records the template-generation milestone. The default now uses
+[AI-generated practice](ai-generated-practice.md); this mode remains available
+through `--templates` or `--offline`.
+
 ## User workflow
 
 1. Choose a language. Python is available; Java, C, and C++ are labeled planned.

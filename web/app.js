@@ -9,6 +9,7 @@ let submittedSource = null;
 let session = null;
 let selectedLanguage = "python";
 let lastRun = null;
+let generationMode = false;
 const labels = {passed: "Passed", failed: "Incorrect result", timeout: "Time limit",
   output_limit: "Output limit", syntax_error: "Syntax error", runtime_error: "Runtime error",
   execution_error: "Execution stopped", protocol_error: "Invalid execution response"};
@@ -64,6 +65,9 @@ function renderSession(view) {
   $("intro-eyebrow").textContent = "ONE SMALL CHALLENGE";
   $("intro-title").textContent = "Find the bug. Understand the fix.";
   $("intro-description").textContent = view.planner_label;
+  const generated = lesson.quality && lesson.quality.source === "ai-generated";
+  $("quality-note").textContent = generated ? `AI draft · separate ${lesson.quality.distinct_models ? "model" : "review call (same model)"} · two solutions passed ${lesson.test_count} combined tests. These checks can still miss mistakes.` : "Reviewed template exercise.";
+  $("hint-description").textContent = generated ? "AI-authored hints checked in a separate review. Reveal one when you need it." : "Hints are reviewed lesson content. Reveal one when you need it.";
   $("title").textContent = lesson.title; $("instructions").textContent = lesson.instructions;
   $("constraints").replaceChildren(); $("skills").replaceChildren();
   for (const text of lesson.constraints) addText($("constraints"), "li", text);
@@ -105,10 +109,21 @@ async function runTests() {
 $("setup-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (!$("topic").value.trim() && !$("notes").value.trim()) { showError("Add a topic or paste your notes first."); return; }
-  perform("Choosing your focus and checking the generated exercises. This can take a minute…", async () => {
+  perform("Preparing your exercise. AI generation and execution checks can take several minutes…", async () => {
+    const timer = setInterval(async () => {
+      try {
+        const response = await fetch("/api/progress");
+        if (response.ok) {
+          const progress = await response.json();
+          if (progress.busy) $("loading").textContent = progress.message;
+        }
+      } catch (_) { /* The session request reports connection failures. */ }
+    }, 2000);
+    try {
     const view = await post("/api/session", {language: selectedLanguage, topic: $("topic").value,
       notes: $("notes").value, difficulty: $("difficulty").value, count: Number($("count").value)});
     renderSession(view);
+    } finally { clearInterval(timer); }
   });
 });
 $("run").addEventListener("click", runTests);
@@ -180,7 +195,10 @@ fetch("/api/setup").then(async (response) => {
       button.setAttribute("aria-pressed", "true");
     });
   }
-  $("family-list").textContent = setup.families.map((family) => family.title).join(" · ");
+  generationMode = setup.mode === "ai-generated";
+  $("mode-title").textContent = generationMode ? "AI-GENERATED PRACTICE · PYTHON FIRST" : "REVIEWED TEMPLATE PRACTICE";
+  $("family-list").textContent = generationMode ? "Questions built around your topic and notes" : setup.families.map((family) => family.title).join(" · ");
+  $("mode-description").textContent = generationMode ? "AM drafts a debugging question. A separate review solves it independently, then both solutions must pass the combined tests. Start with one exercise. Notes guide the question; web research is not enabled." : "Available families use reviewed generators with execution checks. Other topics need AI-generated mode.";
   $("planner-label").textContent = setup.planner_label;
   $("loading").hidden = true; screen("setup"); setBusy(false);
 }).catch((error) => { $("loading").hidden = true; showError(error.message); });
