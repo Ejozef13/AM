@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ai_exercises import DraftRejected, OllamaExerciseGenerator, source_contract, validate_draft
+from ai_exercises import (DRAFT_SCHEMA, REVIEW_SCHEMA, DraftRejected, OllamaExerciseGenerator,
+                          source_contract, validate_draft)
 from am_core import AMError
 from code_runner import RunnerError
 from practice_planner import KeywordPlanner
@@ -87,6 +88,39 @@ class GeneratedTests(unittest.TestCase):
             lessons, _, _ = self.build()
         self.assertEqual(api.call_args_list[1].args[1]["model"], "other-installed-model")
         self.assertTrue(lessons[0]["quality"]["distinct_models"])
+
+    def test_model_schema_includes_local_field_limits(self):
+        fields = DRAFT_SCHEMA["properties"]
+        for name in ("constraints", "skills", "hints"):
+            self.assertEqual(fields[name]["type"], "array")
+            self.assertEqual(fields[name]["minItems"], 1)
+            self.assertEqual(fields[name]["maxItems"], 6)
+            self.assertEqual(fields[name]["items"]["maxLength"], 600)
+        self.assertEqual(fields["title"]["maxLength"], 160)
+        self.assertEqual(fields["reference_solution"]["maxLength"], 8000)
+        self.assertEqual(fields["notes_quote"]["minLength"], 0)
+        self.assertEqual(REVIEW_SCHEMA["properties"]["feedback"]["maxLength"], 1200)
+
+    def test_list_limits_accept_boundaries_and_explain_rejections(self):
+        for field in ("constraints", "skills", "hints"):
+            for count in (1, 6):
+                raw = draft() | {field: ["Valid entry"] * count}
+                validate_draft(raw, NOTES, "standard")
+            for value, diagnostic in (([], "0 items"), (["Entry"] * 7, "7 items"),
+                                      ("One string", "str"), (None, "NoneType")):
+                with self.subTest(field=field, value=value), self.assertRaises(DraftRejected) as caught:
+                    validate_draft(draft() | {field: value}, NOTES, "standard")
+                self.assertIn(field, str(caught.exception))
+                self.assertIn(diagnostic, str(caught.exception))
+
+    def test_constraints_retry_receives_actual_count_and_schema_bounds(self):
+        bad = draft() | {"constraints": ["Requirement"] * 7}
+        with patch("ai_exercises.api", side_effect=[response(bad), response(draft()), response(review())]) as api:
+            self.assertEqual(len(self.build()[0]), 1)
+        retry = api.call_args_list[1].args[1]
+        self.assertEqual(retry["format"]["properties"]["constraints"]["maxItems"], 6)
+        self.assertIn("7 items", json.loads(retry["messages"][1]["content"])["previous_failure"])
+        self.assertIn("1–6", retry["messages"][0]["content"])
 
     def test_signature_errors_identify_role_and_exact_unsupported_feature(self):
         for source, feature in (

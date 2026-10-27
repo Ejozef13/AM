@@ -110,3 +110,13 @@ can omit them. Required keyword-only inputs remain unsupported. Type annotations
 positional-only parameters, and positional defaults continue to work. The HTTP
 error no longer repeats the failure or suggests changing valid notes for a
 format error. Regression tests cover these signature forms and retry behavior.
+
+A subsequent desktop run was rejected for its `constraints` field. The original
+output schema specified an array but omitted the validator's 1–6 item limit.
+Generation schema and validation now share list bounds and text limits; the
+author instructions state them explicitly. Invalid lists report the actual count
+or type in retry feedback. Regression checks cover 1/6-item boundaries, missing
+and oversized lists, schema limits, and recovery from a seven-constraint draft.
+The post-fix suite ran 77 tests: 65 passed and 12 optional Docker tests skipped.
+These checks simulate model responses; the same desktop request still needs
+retesting with live Ollama.
