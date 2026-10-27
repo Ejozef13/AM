@@ -67,6 +67,9 @@ function renderSession(view) {
   $("intro-description").textContent = view.planner_label;
   const generated = lesson.quality && lesson.quality.source === "ai-generated";
   $("quality-note").textContent = generated ? `AI draft · separate ${lesson.quality.distinct_models ? "model" : "review call (same model)"} · two solutions passed ${lesson.test_count} combined tests. These checks can still miss mistakes.` : "Reviewed template exercise.";
+  if (generated && lesson.quality.review_test_repairs) {
+    $("quality-note").textContent += ` ${lesson.quality.review_test_repairs} reviewer expected value(s) corrected and rechecked.`;
+  }
   $("hint-description").textContent = generated ? "AI-authored hints checked in a separate review. Reveal one when you need it." : "Hints are reviewed lesson content. Reveal one when you need it.";
   $("title").textContent = lesson.title; $("instructions").textContent = lesson.instructions;
   $("constraints").replaceChildren(); $("skills").replaceChildren();

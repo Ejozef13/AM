@@ -25,9 +25,33 @@ The existing website layout, file reader, session navigation, and runner are reu
 4. Both solutions must pass every case from both authors in Docker. All tests
    forbid input mutation. The starter must fail a case through an incorrect result
    or forbidden mutation, rather than merely crash or time out.
-5. A rejected draft receives failure feedback and one regeneration attempt. A
-   connection/infrastructure failure aborts immediately. No partial session is
-   published if any requested exercise cannot pass preparation.
+5. Author failures repair the author draft (at most two author attempts).
+   Reviewer format/code failures repair only the review (at most two reviewer
+   attempts per draft). Reviewer content never becomes an author-owned test just
+   because the review failed. Connection/infrastructure failures abort immediately.
+6. When both solutions produce the same return on a reviewer case but disagree
+   with its expected value, a short correction request asks the reviewer to
+   recheck the specification. It can approve expected-value replacements only for
+   the flagged indices. Inputs, solutions, and case count cannot change. Every
+   corrected expectation is executed again before publication. Declined, invalid,
+   or still-inconsistent corrections abort the session rather than deleting cases
+   or silently accepting the observed output as truth.
+7. No partial session is published if any requested exercise fails preparation.
+
+Initial review remains blind to the author's solution/tests. A correction request
+contains the public task, reviewer solution, failing inputs, observed values from
+both solutions, and literal character details for string inputs. Agreement alone
+is not proof of specification correctness; explicit review approval and renewed
+execution are required. An unresolved reviewer failure does not regenerate a
+valid author draft or copy reviewer tests into it.
+
+Within one exercise, passing source/entrypoint/input/expected combinations are
+cached to avoid launching the same container test repeatedly during repair.
+Changing a solution, input, or expected value requires fresh execution. Input
+dictionary insertion order is preserved in cache keys. `reference_runs` describes
+the final validated source/test pairs, not total container launches including
+failed attempts. The UI reports expected-value repairs separately. Starter code
+must still expose an actual failing case after the final review passes.
 
 Tests are data: native JSON positional `args` arrays and `expected` return values.
 For one string parameter use `args: ["level"]`; for one list use `args: [[1,2,3]]`.
@@ -51,7 +75,9 @@ Python synchronous functions with up to five positional arguments are supported.
 Inputs and return values must be JSON-compatible. Tasks use small bounded inputs,
 no input mutation, external packages, files, networking, interactive input, or
 nondeterministic services. Each author supplies 3–8 cases, for 6–16 combined cases.
-Generation is limited to two attempts per exercise and 1–5 exercises per session.
+Generation allows at most two author drafts, two reviews per draft, and one
+expected-value correction per accepted review; sessions contain 1–5 exercises.
+Correction failure aborts immediately rather than triggering another full review.
 The initial author and reviewer each have an 8,000-token output ceiling; incomplete
 or malformed output is rejected. These are limits, not typical answer lengths.
 
@@ -179,3 +205,30 @@ tests skipped (92 total), including native test-value round trips, nested inputs
 syntax-error capture, and trace-file permissions/retention. A live desktop trace
 is still needed if generation continues to fail; simulated tests do not establish
 the cause of that model's actual syntax error.
+
+## Uploaded failure reproduction and repair
+
+The user's captured JSON supplied the concrete failure: both initial solutions
+implemented literal palindrome comparison correctly. The review test named
+`newline symmetry` supplied the five characters with codepoints
+`[97, 92, 110, 32, 97]` and incorrectly expected `true`; both solutions returned
+`false`. A later review put the prose `A man, a plan, a canal, Panama` into the
+Python solution field. The prior retry path also carried the bad review test
+into a new author draft. The repair boundaries above address these failures.
+
+Minimal regression tests use those input/failure shapes without committing the
+user's complete uploaded file. They check correction approval, unchanged inputs
+and source, exact flagged indices, rejection of declined or incorrect corrections,
+review-only syntax repair, and cache behavior. A race between sending an HTTP
+response and releasing the job lock was also removed: the completed operation
+now releases the lock before sending its response to the client.
+
+A separate Chromium run replayed the **actual captured first draft and review**
+using the real Docker runner, with a simulated reviewer correction approving
+`false` for review case 8. The exercise retained all 15 cases and the original
+source/input data. The starter scored 9/15; the repaired submission scored 15/15;
+hints and the session summary worked, with no browser JavaScript errors. This
+replay tests the captured failure path and actual execution, not the live model's
+ability to generate the correction. Live Ollama generation remains a desktop
+check. The latest automated suite contains 99 tests, with 87 passing and 12
+opt-in Docker tests skipped; the capture replay separately exercised Docker.

@@ -41,6 +41,7 @@ class PracticeApp:
         return {**{key: lesson[key] for key in keys},
                 "quality": {key: lesson["quality"][key] for key in
                             ("source", "separate_review", "distinct_models", "reference_runs")}
+                           | {"review_test_repairs": lesson["quality"].get("review_test_repairs", 0)}
                            if "quality" in lesson else {"source": "reviewed-template"},
                 "test_count": len(lesson["tests"]),
                 "hint_count": len(lesson["hints"])}
@@ -155,11 +156,11 @@ def make_server(app, port=8090):
                 if self.path == "/api/session":
                     app.progress = "Preparing your practice session…"
                     key, session = app.sessions.create(data)
-                    self.reply(201, app.sessions.view(key, session, app.public_lesson))
+                    status, payload = 201, app.sessions.view(key, session, app.public_lesson)
                 elif self.path == "/api/session/next":
-                    self.reply(200, app.sessions.next(data, app.public_lesson))
+                    status, payload = 200, app.sessions.next(data, app.public_lesson)
                 elif self.path == "/api/session/finish":
-                    self.reply(200, app.sessions.finish(data))
+                    status, payload = 200, app.sessions.finish(data)
                 elif self.path == "/api/hint":
                     lesson = app.lesson
                     if "session_id" in data:
@@ -169,25 +170,27 @@ def make_server(app, port=8090):
                     hints = lesson["hints"]
                     if type(index) is not int or not 0 <= index < len(hints):
                         raise ValueError("No hint at that position.")
-                    self.reply(200, {"index": index, "hint": hints[index]})
+                    status, payload = 200, {"index": index, "hint": hints[index]}
                 else:
-                    self.reply(200, app.run(data.get("source"), data if "session_id" in data else None))
+                    status, payload = 200, app.run(data.get("source"), data if "session_id" in data else None)
             except ValueError as error:
-                self.reply(400, {"error": str(error)})
+                status, payload = 400, {"error": str(error)}
             except AMError as error:
                 detail = str(error)
                 suffix = "" if "No session was created" in detail else " No session was created."
-                self.reply(503, {"error": f"AM could not prepare this session: {detail}{suffix}"})
+                status, payload = 503, {"error": f"AM could not prepare this session: {detail}{suffix}"}
             except (RunnerError, OSError, subprocess.SubprocessError):
-                self.reply(503, {"error": "Exercise validation or execution could not complete. "
+                status, payload = 503, {"error": "Exercise validation or execution could not complete. "
                             "No new session or overall grade was published. "
                             "Check Docker and sudo authorization in the launch terminal. "
-                            "If needed, stop this server, run sudo -v, and restart it."})
+                            "If needed, stop this server, run sudo -v, and restart it."}
             except Exception:
-                self.reply(500, {"error": "Unexpected runner failure; no overall grade was produced."})
+                status, payload = 500, {"error": "Unexpected runner failure; no overall grade was produced."}
             finally:
                 app.progress = "Ready"
                 app.busy.release()
+            # Complete the operation before the client can start its next request.
+            self.reply(status, payload)
 
     # Non-daemon request threads allow active runner cleanup to finish at shutdown.
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)

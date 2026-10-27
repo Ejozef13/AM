@@ -169,6 +169,13 @@ A failed generated draft never silently becomes a template question. Each
 exercise gets at most two drafts; if preparation fails, no partial session is
 published. Original runner commands and exercises remain available.
 
+Reviewer failures now repair the review separately. When both solutions disagree
+with a reviewer's expected answer, the reviewer can explicitly approve a targeted
+expected-value correction; unchanged code and inputs are preserved, and the
+corrected case must pass execution again. Failed corrections abort preparation.
+They do not silently change test answers, remove failing cases, or regenerate an
+otherwise valid author question.
+
 For troubleshooting, launch with `--diagnostics`. Rejected generated code and
 tests are saved locally to `.am-diagnostics/last-generation.json` (Git-ignored,
 owner-only on creation). Inspect its generated content before sharing it. Normal

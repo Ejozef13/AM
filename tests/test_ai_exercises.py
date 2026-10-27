@@ -114,7 +114,7 @@ class GeneratedTests(unittest.TestCase):
     def test_syntax_diagnostic_identifies_role_line_and_preserves_artifact(self):
         bad = review() | {"reference_solution": "```python\n" + REVIEWER + "```"}
         events = []; self.generator.diagnostics = events.append
-        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad)] * 2):
+        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad), response(bad)]):
             with self.assertRaisesRegex(AMError, "reviewer solution Python syntax error at line 1"):
                 self.build()
         self.assertEqual(events[0]["artifacts"]["review"]["reference_solution"], bad["reference_solution"])
@@ -177,7 +177,7 @@ class GeneratedTests(unittest.TestCase):
         self.assertEqual(fields["reference_solution"]["maxLength"], 8000)
         self.assertNotIn("notes_quote", fields)
         self.assertEqual(fields["evidence_id"]["minLength"], 0)
-        self.assertEqual(REVIEW_SCHEMA["properties"]["feedback"]["maxLength"], 1200)
+        self.assertEqual(REVIEW_SCHEMA["properties"]["feedback"]["maxLength"], 300)
 
     def test_list_limits_accept_boundaries_and_explain_rejections(self):
         for field in ("constraints", "skills", "hints"):
@@ -272,17 +272,22 @@ class GeneratedTests(unittest.TestCase):
 
     def test_reviewer_signature_error_survives_to_final_diagnostic(self):
         bad = review() | {"reference_solution": "@staticmethod\n" + REVIEWER}
-        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad)] * 2):
+        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad), response(bad)]):
             with self.assertRaisesRegex(AMError, "reviewer solution.*decorators: staticmethod"):
                 self.build()
 
     def test_disagreement_retries_then_rejects(self):
         bad = review(); bad["tests"][0]["expected_json"] = "123"
-        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad)] * 2) as api:
-            with self.assertRaisesRegex(AMError, "after two drafts"):
+        wrong_patch = {"approved": True, "feedback": "Still wrong.",
+                       "corrections": [{"test_index": 0, "expected": 123}]}
+        with patch("ai_exercises.api", side_effect=[response(draft()), response(bad), response(wrong_patch),
+                                                    response(bad), response(wrong_patch)]) as api:
+            with self.assertRaisesRegex(AMError, "reviewer could not produce a consistent review"):
                 self.build()
-        retry = json.loads(api.call_args_list[2].args[1]["messages"][1]["content"])
-        self.assertIn("disagree", retry["previous_failure"])
+        repair = json.loads(api.call_args_list[2].args[1]["messages"][1]["content"])
+        self.assertEqual(repair["inconsistent_tests"][0]["expected"], 123)
+        self.assertEqual(len([call for call in api.call_args_list if 'evidence_id' in
+                              call.args[1]['format']['properties']]), 1)
 
     def test_review_rejection_can_be_repaired(self):
         rejected = review() | {"approved": False, "feedback": "Clarify the zero case."}
