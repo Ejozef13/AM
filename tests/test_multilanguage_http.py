@@ -8,6 +8,7 @@ import urllib.error
 import urllib.request
 
 from ai_exercises import OllamaExerciseGenerator
+from code_runner import DockerAuthorizationError
 from practice_web import PracticeApp, make_server
 from run_submission import load_lesson
 from test_multilanguage_generation import NativeFixtureRunner, native_draft, native_review, reply
@@ -65,6 +66,27 @@ class LanguageHttpTests(unittest.TestCase):
         _, setup = self.request('/api/setup')
         self.assertEqual([lang['id'] for lang in setup['languages'] if lang['available']], ['python'])
         self.assertEqual(self.request('/api/session', {'language':'java','topic':'arrays'})[0], 400)
+
+    def test_authorization_recovery_keeps_the_java_exercise_and_does_not_regenerate(self):
+        with patch('ai_exercises.api', side_effect=[reply(native_draft('java')), reply(native_review('java'))]) as model:
+            status, view = self.request('/api/session', {'language':'java','topic':'arrays','count':1})
+            self.assertEqual(status, 201)
+            fields = {'session_id':view['session_id'],'lesson_index':0}
+            session = self.app.sessions.sessions[view['session_id']]
+            with patch.object(self.runtimes['java'], 'run', side_effect=DockerAuthorizationError('sudo expired')):
+                status, result = self.request('/api/run', fields|{'source':native_draft('java')['reference_solution']})
+            self.assertEqual(status, 503)
+            self.assertEqual(result['error_code'], 'docker_authorization_required')
+            self.assertNotIn('passed', result)
+            self.assertIn('Ctrl+Z', result['error'])
+            self.assertNotIn('restart', result['error'])
+            self.assertIs(self.app.sessions.sessions[view['session_id']], session)
+            self.assertEqual(session.attempts, {})
+            self.assertFalse(self.app.busy.locked())
+            status, result = self.request('/api/run', fields|{'source':native_draft('java')['reference_solution']})
+            self.assertEqual(status, 200)
+            self.assertEqual(result['passed'], 6)
+            self.assertEqual(model.call_count, 2)
 
 
 if __name__ == '__main__':

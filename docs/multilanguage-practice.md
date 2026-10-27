@@ -28,6 +28,20 @@ the other buttons explain that setup is needed. Refresh the page after restartin
 If sudo credentials expire during a long build, run `sudo -v` and then
 `python tools/setup_compiled_runtime.py --use-existing-image` to probe the built image.
 
+If Docker's sudo authorization expires while studying, keep the browser page
+open. In the same terminal running the website, press Ctrl+Z to suspend it,
+run `sudo -v`, then run `fg` to resume it. Click Run tests again. This retains
+the in-memory exercise and editor contents; restarting the server loses the
+session. Another terminal may have a different sudo timestamp and does not
+reliably refresh the launch terminal's authorization.
+
+Authorization failures have a specific response code. Other runner failures
+show their framework-provided cause instead of assuming sudo expired. With
+`--diagnostics`, execution failures also print an `AM execution diagnostic:`
+line containing the operation, exception type, and bounded detail; submissions,
+test arguments, answer keys, and notes are not included in that diagnostic.
+Failed infrastructure requests do not record a student attempt or an overall grade.
+
 Java uses JDK 21, C uses C17, and C++ uses C++17. No extra Python packages are
 required. Compilation happens inside the container, including model-authored
 reference code. No uploaded code is executed on the host.
@@ -149,6 +163,16 @@ network test only, the base image received the cloud's public CA bundle and
 proxy settings; certificate verification stayed enabled. The shipped default
 Dockerfile continues to use the pinned upstream Python base. Browser peer
 disconnects now close the response without an expected broken-pipe traceback.
+
+Runner-recovery follow-up: the default suite ran 135 tests (113 passed,
+22 optional container tests skipped). A trusted fake-sudo process verifies
+that a password-required exit status of 1 is an infrastructure error, including
+cleanup. The Java HTTP recovery test preserves the same exercise, records no
+failed infrastructure attempt, and grades a retry without another model call.
+Execution-diagnostic tests verify that the cause is logged without submission
+contents. A separate real Java check rejected the all-negative starter result
+and accepted the corrected maximum-finding function. These checks do not
+identify the cause of a particular desktop failure without its runtime diagnostic.
 
 Two model calls can share mistakes, particularly when using the same model.
 Passing the combined suite does not prove the question matches its notes or

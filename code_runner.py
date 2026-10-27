@@ -12,6 +12,10 @@ class RunnerError(Exception):
     """An infrastructure failure, not an incorrect student answer."""
 
 
+class DockerAuthorizationError(RunnerError):
+    """The sudo credential needed to start/clean up a container is unavailable."""
+
+
 # This program executes INSIDE the container.
 # Student source is never executed in the host process.
 DRIVER = r"""
@@ -139,11 +143,19 @@ class DockerRunner:
                 raise RunnerError('Could not confirm container cleanup after two attempts.') from error
             if not result.returncode:
                 return True
+            self.check_authorization(result.stderr)
             if 'No such container' in result.stderr:
                 return False
             if attempt == 0 and 'removal of container' in result.stderr and 'in progress' in result.stderr:
                 continue
             raise RunnerError('Could not confirm container cleanup: ' + result.stderr[:400])
+
+    def check_authorization(self, output):
+        if (self.command and self.command[0].rsplit('/', 1)[-1] == 'sudo'
+                and 'sudo:' in output.lower()
+                and any(text in output.lower() for text in
+                        ('password is required', 'a terminal is required', 'authentication is required'))):
+            raise DockerAuthorizationError('Docker sudo authorization is unavailable or expired.')
 
     def run(self, source, entrypoint, args):
         """Execute one function call with bounded input and output."""
@@ -278,6 +290,8 @@ class DockerRunner:
                 }
 
             # Docker startup failures are not learner failures.
+            if code:
+                self.check_authorization(captured.decode(errors='replace'))
             if code in {125, 126, 127}:
                 raise RunnerError(
                     "Docker could not execute the test: "

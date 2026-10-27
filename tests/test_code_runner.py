@@ -4,15 +4,35 @@ import os
 from pathlib import Path
 import unittest
 import subprocess
+import tempfile
 from unittest.mock import Mock, patch
 
-from code_runner import DockerRunner, equivalent, grade_case
+from code_runner import DockerAuthorizationError, DockerRunner, equivalent, grade_case
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_DOCKER = os.environ.get("AM_DOCKER_TESTS") == "1"
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_expired_sudo_exit_one_is_infrastructure_failure_not_a_grade(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sudo = Path(directory) / 'sudo'
+            sudo.write_text("#!/bin/sh\nprintf '%s\\n' 'sudo: a password is required' >&2\nexit 1\n")
+            sudo.chmod(0o700)
+            runner = DockerRunner('python@sha256:'+'a'*64, command=(str(sudo), '-n', 'docker'))
+            with self.assertRaises(DockerAuthorizationError):
+                runner.run('def f(): return 42', 'f', [])
+
+    def test_only_sudo_authorization_messages_receive_auth_classification(self):
+        direct = DockerRunner('python@sha256:'+'a'*64, command=('docker',))
+        direct.check_authorization('sudo: a password is required')
+        via_sudo = DockerRunner('python@sha256:'+'a'*64)
+        via_sudo.check_authorization('Docker daemon is unavailable')
+        with patch('code_runner.subprocess.run', return_value=Mock(
+                returncode=1, stderr='sudo: a password is required')):
+            with self.assertRaises(DockerAuthorizationError):
+                via_sudo.remove('am-case-auth-check')
+
     def test_json_comparison(self):
         # Avoid accidentally accepting True or 1.0 for an integer answer.
         self.assertFalse(equivalent(True, 1))

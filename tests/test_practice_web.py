@@ -1,10 +1,11 @@
 """HTTP and grading-service tests. Docker calls are simulated here."""
 
 import json
+import io
 from pathlib import Path
 import threading
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import urllib.error
 import urllib.request
 
@@ -131,6 +132,23 @@ class PracticeWebTests(unittest.TestCase):
         status, raw, _ = self.request("/api/run", {"source": "code"})
         self.assertEqual(status, 503)
         self.assertNotIn("passed", json.loads(raw))
+        self.assertFalse(self.app.busy.locked())
+
+    def test_execution_diagnostics_report_the_cause_without_submission_data(self):
+        self.app.diagnostics = True
+        self.runner.run.side_effect = RunnerError('Compiler container preparation exceeded its wall-time allowance.')
+        stream = io.StringIO()
+        with patch('practice_web.sys.stderr', stream):
+            status, raw, _ = self.request('/api/run', {'source':'PRIVATE_SUBMISSION_MARKER'})
+        result = json.loads(raw)
+        self.assertEqual(status, 503)
+        self.assertEqual(result['error_code'], 'runner_unavailable')
+        self.assertIn('preparation exceeded', result['error'])
+        self.assertIn('retained', result['error'])
+        self.assertIn('AM execution diagnostic:', stream.getvalue())
+        self.assertIn('preparation exceeded', stream.getvalue())
+        self.assertNotIn('PRIVATE_SUBMISSION_MARKER', stream.getvalue())
+        self.assertNotIn('args', stream.getvalue())
         self.assertFalse(self.app.busy.locked())
 
     def test_wrong_answers_are_not_infrastructure_failures(self):

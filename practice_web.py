@@ -6,9 +6,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import subprocess
+import sys
 import threading
 
-from code_runner import DockerRunner, RunnerError, grade_case
+from code_runner import DockerAuthorizationError, DockerRunner, RunnerError, grade_case
 from am_core import AMError
 from ai_exercises import OllamaExerciseGenerator
 from generation_diagnostics import DiagnosticRecorder
@@ -22,18 +23,27 @@ ROOT = Path(__file__).resolve().parent
 
 
 class PracticeApp:
-    def __init__(self, lesson, runner, planner=None, generator=None, runtimes=None):
+    def __init__(self, lesson, runner, planner=None, generator=None, runtimes=None, diagnostics=False):
         self.lesson = lesson
         self.runner = runner
         self.runtimes = runtimes or {'python': runner}
         self.busy = threading.Lock()
         self.sessions = SessionStore(planner or OllamaPlanner(), runner, generator)
         self.progress = "Ready"
+        self.diagnostics = diagnostics
         if generator is not None:
             generator.progress = self.set_progress
 
     def set_progress(self, message):
         self.progress = message
+
+    def execution_diagnostic(self, operation, error):
+        if self.diagnostics:
+            # JSON quoting keeps terminal control characters escaped. Do not
+            # log submissions, test inputs, answer keys, or note contents here.
+            print('AM execution diagnostic: ' + json.dumps({
+                'operation': operation, 'error_type': type(error).__name__,
+                'detail': str(error)[:1200]}), file=sys.stderr, flush=True)
 
     def public_lesson(self, lesson=None):
         # Explicit allowlist: reference solution, hints and answer keys stay off
@@ -53,7 +63,7 @@ class PracticeApp:
     def run(self, source, session_data=None):
         # Source is passed only to the container, never exec'd on the host.
         if not isinstance(source, str) or not source.strip():
-            raise ValueError("Enter some Python code first.")
+            raise ValueError("Enter some code first.")
         if len(source.encode("utf-8")) > 16000:
             raise ValueError("Keep the submission below 16,000 UTF-8 bytes.")
         session = None
@@ -205,11 +215,18 @@ def make_server(app, port=8090):
                 detail = str(error)
                 suffix = "" if "No session was created" in detail else " No session was created."
                 status, payload = 503, {"error": f"AM could not prepare this session: {detail}{suffix}"}
-            except (RunnerError, OSError, subprocess.SubprocessError):
-                status, payload = 503, {"error": "Exercise validation or execution could not complete. "
-                            "No new session or overall grade was published. "
-                            "Check Docker and sudo authorization in the launch terminal. "
-                            "If needed, stop this server, run sudo -v, and restart it."}
+            except DockerAuthorizationError as error:
+                app.execution_diagnostic(self.path, error)
+                status, payload = 503, {'error_code': 'docker_authorization_required',
+                    'error': 'Docker authorization expired or needs a password. No overall grade was published. '
+                             'Keep this page open. In the terminal running this website, press Ctrl+Z, '
+                             'run sudo -v, then run fg and retry. Existing exercises and editor contents are kept.'}
+            except (RunnerError, OSError, subprocess.SubprocessError) as error:
+                app.execution_diagnostic(self.path, error)
+                detail = str(error)[:600] if isinstance(error, RunnerError) else 'Check the launch terminal for diagnostic details.'
+                status, payload = 503, {'error_code': 'runner_unavailable',
+                    'error': 'Execution could not complete; no overall grade was published. ' + detail +
+                             ' Existing exercises and editor contents are retained. Restore Docker access and retry.'}
             except Exception:
                 status, payload = 500, {"error": "Unexpected runner failure; no overall grade was produced."}
             finally:
@@ -264,7 +281,8 @@ def main():
             runner, args.model, args.review_model,
             diagnostics=DiagnosticRecorder(ROOT / ".am-diagnostics") if args.diagnostics else None,
             runtimes=runtimes)
-        server = make_server(PracticeApp(lesson, runner, planner, generator, runtimes), args.port)
+        server = make_server(PracticeApp(lesson, runner, planner, generator, runtimes,
+                                       diagnostics=args.diagnostics), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)
