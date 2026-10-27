@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "id": "python-largest-value",
+  "title": "Find the largest value",
+  "language": "python",
+  "kind": "debugging",
+  "difficulty": "introductory",
+  "skills": [
+    "initialization",
+    "loops",
+    "edge cases"
+  ],
+  "instructions": "Repair largest_value(numbers) so it returns the largest integer in the list. Keep the function name and parameter unchanged.",
+  "constraints": [
+    "numbers is a nonempty list containing between 1 and 100 integers.",
+    "Each integer is between -1000000 and 1000000.",
+    "Return the largest value; do not print it.",
+    "Do not modify the input list."
+  ],
+  "entrypoint": "largest_value",
+  "grading": {
+  "forbid_input_mutation": true
+	},
+  "starter_code": "def largest_value(numbers):\n    best = 0\n    for number in numbers:\n        if number > best:\n            best = number\n    return best\n",
+  "reference_solution": "def largest_value(numbers):\n    best = numbers[0]\n    for number in numbers[1:]:\n        if number > best:\n            best = number\n    return best\n",
+  "hints": [
+    "Check what happens when every number is negative.",
+    "What assumption does initializing best to zero make?",
+    "The list is guaranteed to be nonempty. Can an existing element provide the initial value?"
+  ],
+  "tests": [
+    {
+      "name": "positive values",
+      "args": [[3, 8, 2]],
+      "expected": 8
+    },
+    {
+      "name": "all negative",
+      "args": [[-8, -3, -5]],
+      "expected": -3
+    },
+    {
+      "name": "single negative value",
+      "args": [[-7]],
+      "expected": -7
+    },
+    {
+      "name": "zero",
+      "args": [[0]],
+      "expected": 0
+    },
+    {
+      "name": "mixed signs",
+      "args": [[-4, 0, 9, -2]],
+      "expected": 9
+    },
+    {
+      "name": "repeated maximum",
+      "args": [[5, 1, 5]],
+      "expected": 5
+    },
+    {
+      "name": "maximum at the beginning",
+      "args": [[9, 4, 1]],
+      "expected": 9
+    },
+    {
+      "name": "maximum at the end",
+      "args": [[1, 4, 9]],
+      "expected": 9
+    }
+  ]
+}
