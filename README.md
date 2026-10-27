@@ -154,7 +154,8 @@ public hostile-code service.
 
 Python function exercises work first. Java, C, C++, PDF/slides, persistent
 progress, web research, and document retrieval are not implemented. The provided
-notes are sent directly to local Ollama, with exact-quote provenance checks.
+notes are sent directly to local Ollama as numbered excerpts. AM selects an
+excerpt ID; the app inserts the original text rather than asking AM to copy it.
 There is no web search or automatic source verification in this milestone.
 
 Previous template modes remain explicit options:

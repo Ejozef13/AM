@@ -16,6 +16,9 @@ The existing website layout, file reader, session navigation, and runner are reu
    used in the session. It returns structured exercise data, not terminal commands.
 2. Local validation bounds prose, code, JSON tests, function arity, and evidence.
    AST parsing checks syntax without executing code on the host.
+   Notes are divided into verbatim chunks of at most 600 characters. The model
+   selects an `evidence_id` from the provided list; the application inserts the
+   original source text. The output schema does not request model-written quotes.
 3. A fresh reviewer request sees the question, starter, hints, and original notes.
    It does **not** receive the author's solution or tests. It assesses ambiguity,
    relevance, and hints, then writes its own solution and expected cases.
@@ -58,7 +61,11 @@ Notes limits and in-memory retention match the previous milestone: UTF-8 text,
 Markdown, and code files; 48 KB per file, 12,000 combined characters; ephemeral
 sessions in RAM. The app saves no notes or progress to disk. No web search, RAG,
 PDF parsing, or online source verification is implemented. All supplied notes go
-to the local model directly. Exact quotes confirm origin, not interpretation.
+to the local model directly. Excerpt IDs confirm origin, not interpretation or
+relevance. The reviewer still sees the full notes and selected excerpt to check
+whether they support the exercise. Unknown IDs are rejected rather than silently
+substituting an unrelated passage. With no notes, the selected ID and quote are
+empty. Short notes remain usable; there is no arbitrary eight-character minimum.
 
 `--templates` retains the reviewed-family mode with AM focus selection.
 `--offline` uses explicit keyword matching and reviewed templates without any
@@ -142,3 +149,11 @@ total). Checks include metadata recovery without code changes, ambiguous and
 mismatched definitions, repair context, diagnostic fields, and a complete simulated
 author/reviewer workflow with a signature-style entrypoint. Live model generation
 has still not been verified in this workspace.
+
+Desktop diagnostics then identified a repeated verbatim-quotation rejection,
+before the reviewer was called. The excerpt-ID design above replaces that copying
+requirement. Tests verify that a model's unsolicited paraphrase cannot overwrite
+the original excerpt or block an otherwise valid draft, that multiline/Unicode
+notes retain their exact text, and that empty/short notes and invalid IDs behave
+explicitly. These tests simulate model responses; live desktop generation is
+still the remaining end-to-end check.

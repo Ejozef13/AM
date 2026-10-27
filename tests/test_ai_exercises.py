@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from ai_exercises import (DRAFT_SCHEMA, REVIEW_SCHEMA, DraftRejected, OllamaExerciseGenerator,
-                          source_contract, validate_draft)
+                          bind_evidence, note_excerpts, source_contract, validate_draft)
 from am_core import AMError
 from code_runner import RunnerError
 from practice_planner import KeywordPlanner
@@ -32,7 +32,8 @@ def draft():
             "starter_code": STARTER, "reference_solution": REFERENCE,
             "hints": ["Check the base case.", "What is zero factorial?"],
             "tests": [case("zero", 0), case("one", 1), case("five", 5)],
-            "focus": "Factorial base cases", "reason": "The notes define zero factorial.", "notes_quote": NOTES}
+            "focus": "Factorial base cases", "reason": "The notes define zero factorial.",
+            "evidence_id": "note-1", "notes_quote": NOTES}
 
 
 def review():
@@ -82,6 +83,45 @@ class GeneratedTests(unittest.TestCase):
         self.assertNotIn("tools", payload)
         self.assertEqual(plan["notes_quote"], NOTES)
 
+    def test_generated_quote_cannot_block_or_replace_original_evidence(self):
+        raw = draft() | {"notes_quote": "A model paraphrase that is not present in the notes."}
+        with patch("ai_exercises.api", side_effect=[response(raw), response(review())]) as api:
+            lessons, plan, _ = self.build()
+        self.assertEqual(api.call_count, 2)
+        self.assertEqual(plan["notes_quote"], NOTES)
+        payload = api.call_args_list[0].args[1]
+        self.assertEqual(payload["format"]["properties"]["evidence_id"]["enum"], ["note-1"])
+        self.assertNotIn("notes_quote", payload["format"]["properties"])
+        author_data = json.loads(payload["messages"][1]["content"])
+        self.assertEqual(author_data["note_excerpts"], {"note-1": NOTES})
+        self.assertNotIn("notes", author_data)
+        reviewer_data = json.loads(api.call_args_list[1].args[1]["messages"][1]["content"])
+        self.assertEqual(reviewer_data["exercise"]["focus_plan"]["notes_quote"], NOTES)
+
+    def test_excerpt_ids_preserve_original_unicode_whitespace_and_long_notes(self):
+        notes = ("Line one.\nLine two uses ‘quotes’ and  double spaces.\n" * 400)[:12000]
+        excerpts = note_excerpts(notes)
+        self.assertEqual(len(excerpts), 20)
+        for identifier, quote in excerpts.items():
+            self.assertIn(quote, notes)
+            self.assertLessEqual(len(quote), 600)
+            bound = bind_evidence(draft() | {"evidence_id": identifier}, excerpts)
+            self.assertEqual(bound["notes_quote"], quote)
+        bound = bind_evidence(draft(), note_excerpts("abc"))
+        validate_draft(bound, "abc", "standard")
+
+    def test_no_notes_requires_no_selected_evidence(self):
+        raw = draft() | {"evidence_id": ""}
+        with patch("ai_exercises.api", side_effect=[response(raw), response(review())]) as api:
+            _, plan, _ = self.generator.build("factorial", "", "standard", 1)
+        self.assertEqual(plan["notes_quote"], "")
+        self.assertEqual(api.call_args_list[0].args[1]["format"]["properties"]["evidence_id"]["enum"], [""])
+
+    def test_invented_evidence_id_is_not_replaced_with_unrelated_material(self):
+        for value in ("note-99", "", ["note-1"], None):
+            with self.subTest(value=value), self.assertRaises(DraftRejected):
+                bind_evidence(draft() | {"evidence_id": value}, note_excerpts(NOTES))
+
     def test_distinct_reviewer_is_configurable(self):
         self.generator.review_model = "other-installed-model"
         with patch("ai_exercises.api", side_effect=[response(draft()), response(review())]) as api:
@@ -98,7 +138,8 @@ class GeneratedTests(unittest.TestCase):
             self.assertEqual(fields[name]["items"]["maxLength"], 600)
         self.assertEqual(fields["title"]["maxLength"], 160)
         self.assertEqual(fields["reference_solution"]["maxLength"], 8000)
-        self.assertEqual(fields["notes_quote"]["minLength"], 0)
+        self.assertNotIn("notes_quote", fields)
+        self.assertEqual(fields["evidence_id"]["minLength"], 0)
         self.assertEqual(REVIEW_SCHEMA["properties"]["feedback"]["maxLength"], 1200)
 
     def test_list_limits_accept_boundaries_and_explain_rejections(self):

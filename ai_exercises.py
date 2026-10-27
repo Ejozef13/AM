@@ -1,6 +1,7 @@
 """AI-authored Python drafts, blind review, and bounded container validation."""
 
 import ast
+from copy import deepcopy
 import json
 import keyword
 import uuid
@@ -21,7 +22,7 @@ def string_schema(limit, minimum=1):
 
 TEXT_LIMITS = {"title": 160, "instructions": 3000, "entrypoint": 80,
                "starter_code": 8000, "reference_solution": 8000,
-               "focus": 160, "reason": 600, "notes_quote": 600}
+               "focus": 160, "reason": 600}
 LIST_FIELDS = ("constraints", "skills", "hints")
 LIST_MIN, LIST_MAX, ITEM_LIMIT = 1, 6, 600
 STRINGS = {"type": "array", "items": string_schema(ITEM_LIMIT),
@@ -32,8 +33,8 @@ CASE_SCHEMA = object_schema({"name": string_schema(100), "args_json": string_sch
                              "expected_json": string_schema(4000)})
 TESTS_SCHEMA = {"type": "array", "items": CASE_SCHEMA, "minItems": 3, "maxItems": 8}
 DRAFT_SCHEMA = object_schema({
-    **{name: string_schema(limit, 0 if name == "notes_quote" else 1)
-       for name, limit in TEXT_LIMITS.items()},
+    **{name: string_schema(limit) for name, limit in TEXT_LIMITS.items()},
+    "evidence_id": string_schema(16, 0),
     **{name: STRINGS for name in LIST_FIELDS}, "tests": TESTS_SCHEMA,
 })
 DRAFT_SCHEMA["properties"]["entrypoint"].update(
@@ -47,6 +48,25 @@ REVIEW_SCHEMA = object_schema({
 
 class DraftRejected(Exception):
     """A bounded draft can be regenerated; infrastructure errors must abort."""
+
+
+def note_excerpts(notes):
+    """Bounded, verbatim source chunks; no generated quotations or web retrieval."""
+    chunks = [notes[start:start + 600] for start in range(0, len(notes), 600)]
+    return {f"note-{index + 1}": chunk for index, chunk in enumerate(chunks) if chunk.strip()}
+
+
+def bind_evidence(raw, excerpts):
+    if not isinstance(raw, dict):
+        raise DraftRejected("Expected a structured exercise object.")
+    selected = raw.get("evidence_id")
+    choices = excerpts if excerpts else {"": ""}
+    if not isinstance(selected, str) or selected not in choices:
+        raise DraftRejected(f"Unknown evidence_id {str(selected)[:80]!r}; select one of {list(choices)}. "
+                            "Select an excerpt ID, not a quotation or explanation.")
+    # Any unsolicited model-written quote is deliberately ignored. Only original
+    # source text enters the student-facing evidence field.
+    return {**raw, "notes_quote": choices[selected]}
 
 
 def text(value, name, limit):
@@ -179,10 +199,10 @@ def validate_draft(raw, notes, difficulty):
         for value in values:
             text(value, field, ITEM_LIMIT)
     quote = raw.get("notes_quote")
-    if not isinstance(quote, str) or len(quote) > TEXT_LIMITS["notes_quote"]:
+    if not isinstance(quote, str) or len(quote) > 600:
         raise DraftRejected("Invalid notes evidence.")
-    if notes and (len(quote.strip()) < 8 or quote not in notes):
-        raise DraftRejected("Evidence must quote 8–600 characters verbatim from the supplied notes.")
+    if notes and (not quote.strip() or quote not in notes):
+        raise DraftRejected("Evidence must contain an original excerpt from the supplied notes.")
     if not notes and quote:
         raise DraftRejected("Do not invent notes evidence when no notes were supplied.")
     entrypoint = resolve_entrypoint(raw)
@@ -240,6 +260,9 @@ class OllamaExerciseGenerator:
 
     def build(self, topic, notes, difficulty, count):
         lessons = []
+        excerpts = note_excerpts(notes)
+        schema = deepcopy(DRAFT_SCHEMA)
+        schema["properties"]["evidence_id"]["enum"] = list(excerpts) if excerpts else [""]
         for number in range(count):
             failure = ""
             previous_draft = None
@@ -263,12 +286,14 @@ class OllamaExerciseGenerator:
                         "No input mutation, files, networking, packages, interaction, randomness, or external services. "
                         "Use small bounded inputs. Supply 3–8 tests including boundaries and a case exposing the bug. "
                         "Encode each args_json as a JSON array of positional arguments; expected_json is the JSON return. "
-                        "With notes, quote 8–600 characters verbatim in notes_quote and explain relevance; otherwise quote empty. "
+                        "Select evidence_id from the supplied note_excerpts IDs to support this task; "
+                        "explain relevance in reason. Do not copy or generate a notes_quote field. "
+                        "If no notes were supplied, evidence_id must be the empty string. "
                         "Match the requested difficulty and avoid previously used tasks. Do not claim web research or certainty.",
-                        {"topic": topic, "notes": notes, "difficulty": difficulty,
+                        {"topic": topic, "note_excerpts": excerpts, "difficulty": difficulty,
                          "previous_tasks": [lesson["title"] for lesson in lessons], "previous_failure": failure,
-                         "previous_draft": previous_draft}, DRAFT_SCHEMA)
-                    lesson = validate_draft(raw, notes, difficulty)
+                         "previous_draft": previous_draft}, schema)
+                    lesson = validate_draft(bind_evidence(raw, excerpts), notes, difficulty)
                     self.progress(f"Exercise {number + 1}/{count}: a separate review is solving and checking the question…")
                     # Deliberately exclude author's solution AND tests, so the reviewer
                     # derives outputs from the specification rather than copying them.
@@ -310,6 +335,7 @@ class OllamaExerciseGenerator:
                     failure = str(error)[:1400]
                     self.diagnostics({"exercise": number + 1, "attempt": attempt + 1,
                         "error": failure, "entrypoint": str(raw.get("entrypoint"))[:160] if isinstance(raw, dict) else None,
+                        "evidence_id": str(raw.get("evidence_id"))[:80] if isinstance(raw, dict) else None,
                         "lists": {name: {"type": type(raw.get(name)).__name__,
                             "count": len(raw[name]) if isinstance(raw.get(name), list) else None}
                             for name in LIST_FIELDS} if isinstance(raw, dict) else {},
