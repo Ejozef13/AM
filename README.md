@@ -118,7 +118,34 @@ Different models may use different tokenizers and reasoning settings.
 Generation throughput is not the same as end-to-end latency.
 One successful run does not establish general accuracy or hardware limits.
 
-## Next milestone
+## Coding-practice browser prototype
 
-Complete desktop acceptance tests, save a Git checkpoint,
-then prepare Open WebUI.
+The first Python debugging lesson now has a local browser editor, progressive
+reviewed hints, and results from the existing Docker runner. It does not use AI
+to grade submissions and does not modify the Ollama/Open WebUI deployment.
+
+From the project root:
+
+```bash
+sudo -v
+python practice_web.py
+```
+
+Open `http://127.0.0.1:8090` in your desktop browser. Keep the launch terminal
+open. Run the starter to observe its two failing cases, request a hint, then
+repair it and run again. Ctrl+C stops the app and waits for active runner cleanup.
+Do not run the application server itself with sudo.
+
+The loopback-only prototype is for local practice, not public hostile-code
+submissions. It stores neither editor drafts nor progress. If sudo authorization
+expires, stop the app, run `sudo -v`, and restart it. No passwordless sudo rule is
+required. See [browser-practice.md](docs/browser-practice.md) for design and checks.
+
+New HTTP tests do not require Docker:
+
+```bash
+python -m unittest discover -s tests -p test_practice_web.py -v
+```
+
+Next: add the remaining reviewed lessons and navigation, then ground AM's hints
+and explanations in actual test results. AI must not control the pass/fail grade.

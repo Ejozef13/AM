@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AM · Coding practice</title>
+  <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="/">AM<span>practice</span></a><span class="badge">PYTHON · DEBUGGING</span></header>
+    <div class="intro"><p class="eyebrow">ONE SMALL CHALLENGE</p><h1>Find the bug.<br>Understand the fix.</h1><p>Read the task, make a change, and let the tests tell you what happened.</p></div>
+    <p id="error" role="alert" hidden></p>
+    <p id="loading" role="status">Loading your lesson…</p>
+    <div id="workspace" class="workspace" hidden>
+      <section class="card lesson" aria-labelledby="title">
+        <p class="eyebrow">YOUR TASK</p><h2 id="title"></h2><p id="instructions"></p>
+        <h3>Requirements</h3><ul id="constraints"></ul>
+        <div id="skills" class="skills"></div>
+        <section class="hints"><h3>Need a nudge?</h3><p>Hints are reviewed lesson content. Reveal one when you need it.</p><ol id="hints"></ol><button id="hint" type="button" class="secondary">Show first hint</button></section>
+      </section>
+      <section class="card coding" aria-label="Code editor and results">
+        <div class="section-top"><label for="source">Your solution</label><button id="reset" class="text-button" type="button">Reset starter</button></div>
+        <div class="editor-label">Python · function submission</div>
+        <textarea id="source" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="editor-help"></textarea>
+        <p id="editor-help" class="muted">Tab inserts four spaces. Ctrl+Enter or ⌘+Enter runs tests. Edits stay in this tab and are not saved.</p>
+        <div class="run-bar"><button id="run" class="primary" type="button">Run tests <span aria-hidden="true">→</span></button><span id="activity" role="status" aria-live="polite"></span></div>
+        <section id="results" hidden aria-labelledby="result-title"><h2 id="result-title"></h2><p id="result-note" class="muted"></p><div id="test-list"></div></section>
+      </section>
+    </div>
+    <footer>Test-based feedback · restricted local execution · no AI grading<br>Passing the reviewed cases does not prove correctness for every input.</footer>
+  </main>
+</body>
+</html>
