@@ -25,12 +25,13 @@ ROOT = Path(__file__).resolve().parent
 
 
 class PracticeApp:
-    def __init__(self, runner, generator, runtimes=None, diagnostics=False, persistence=None):
+    def __init__(self, runner, generator, runtimes=None, diagnostics=False, persistence=None, authorization=None):
         self.runner = runner
         self.runtimes = runtimes or {'python': runner}
         self.busy = threading.Lock()
         self.sessions = SessionStore(generator, persistence)
         self.persistence = persistence
+        self.authorization = authorization
         self.progress = "Ready"
         self.diagnostics = diagnostics
         self.stop_event = threading.Event()
@@ -250,11 +251,14 @@ def make_server(app, port=8090):
                 suffix = "" if "No session was created" in detail else " No session was created."
                 status, payload = 503, {"error": f"AM could not prepare this session: {detail}{suffix}"}
             except DockerAuthorizationError as error:
+                if app.authorization:
+                    app.authorization.request_renewal()
                 app.execution_diagnostic(self.path, error)
                 status, payload = 503, {'error_code': 'docker_authorization_required',
                     'error': 'Docker authorization expired or needs a password. No overall grade was published. '
-                             'Keep this page open. In the terminal running this website, press Ctrl+Z, '
-                             'run sudo -v, then run fg and retry. Existing exercises and editor contents are kept.'}
+                             'AM stays open. If the launch terminal shows a password prompt, enter it there and retry. '
+                             'For an older/unmanaged launch, press Ctrl+Z, run sudo -v, then fg. No restart is needed; '
+                             'existing exercises and editor contents are kept.'}
             except (RunnerError, OSError, subprocess.SubprocessError) as error:
                 app.execution_diagnostic(self.path, error)
                 detail = str(error)[:600] if isinstance(error, RunnerError) else 'Check the launch terminal for diagnostic details.'
@@ -276,7 +280,7 @@ def make_server(app, port=8090):
     return server
 
 
-def main(argv=None, on_ready=None):
+def main(argv=None, on_ready=None, authorization=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--docker-direct", action="store_true",
@@ -314,7 +318,8 @@ def main(argv=None, on_ready=None):
             runtimes=runtimes)
         server = make_server(PracticeApp(runner, generator, runtimes,
                                        diagnostics=args.diagnostics,
-                                       persistence=ProgressStore(Path(os.environ.get('AM_DATA_DIR', str(ROOT/'.am-data')))/'progress.sqlite3')), args.port)
+                                       persistence=ProgressStore(Path(os.environ.get('AM_DATA_DIR', str(ROOT/'.am-data')))/'progress.sqlite3'),
+                                       authorization=authorization), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)

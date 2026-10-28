@@ -19,7 +19,11 @@ cd ~/Projects/AM
 python am.py on --diagnostics
 ```
 
-Keep this terminal open. Visit http://127.0.0.1:8090. Choose a language, add a
+Keep this terminal open. AM refreshes sudo authorization while it runs. If the
+OS invalidates it after sleep, enter the password in this same terminal and retry;
+there is no need to stop/restart. See [Docker access](docker-access.md).
+
+Visit http://127.0.0.1:8090. Choose a language, add a
 topic and notes, and start with one exercise. The default model is
 `am-study:latest`, configured from `gpt-oss:20b` in `infrastructure/Modelfile`.
 Startup reports the actual installed model metadata.

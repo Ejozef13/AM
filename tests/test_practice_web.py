@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import urllib.error
 import urllib.request
 
-from code_runner import RunnerError
+from code_runner import RunnerError, DockerAuthorizationError
 from practice_web import PracticeApp, make_server
 from ai_exercises import validate_draft
 from test_multilanguage_generation import native_draft
@@ -151,6 +151,15 @@ class PracticeWebTests(unittest.TestCase):
         self.assertEqual(status, 503)
         self.assertNotIn("passed", json.loads(raw))
         self.assertFalse(self.app.busy.locked())
+
+    def test_expired_authorization_requests_terminal_renewal_without_publishing_a_grade(self):
+        self.app.authorization=Mock()
+        self.runner.run.side_effect=DockerAuthorizationError('sudo expired')
+        status,raw,_=self.request('/api/run',{'source':'fixture'})
+        self.assertEqual(status,503)
+        self.assertNotIn('passed',json.loads(raw))
+        self.app.authorization.request_renewal.assert_called_once_with()
+        self.assertIn(self.fields['session_id'],self.app.sessions.sessions)
 
     def test_execution_diagnostics_report_the_cause_without_submission_data(self):
         self.app.diagnostics = True

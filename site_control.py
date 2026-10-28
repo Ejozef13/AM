@@ -10,6 +10,7 @@ import subprocess
 import time
 
 from am_core import AMError, PRACTICE_MODEL, api
+from sudo_session import SudoSession
 
 ROOT = Path(__file__).resolve().parent
 
@@ -118,8 +119,13 @@ def serve(args, start_ollama, unload_model):
         state = {'root':str(ROOT),'pid':os.getpid(),'start':identity(os.getpid()),
                  'port':args.port,'phase':'starting','models':[]}
         save_state(state)
+        sudo_session = None
         try:
             direct = docker_access(args.docker_direct)
+            if not direct:
+                sudo_session = SudoSession().start()
+                print('Docker authorization is refreshed while AM runs. Keep this terminal open; '
+                      'password renewal after system sleep happens here without restarting AM.', flush=True)
             start_ollama()
             models = list(dict.fromkeys([args.model, args.review_model or args.model]))
             for model in models:
@@ -139,17 +145,21 @@ def serve(args, start_ollama, unload_model):
                 state.update(port=port,phase='running')
                 save_state(state)
                 print('Website ON. Ctrl+C switches it off; another terminal can run: python am.py off',flush=True)
-            practice_web.main(flags, on_ready=ready)
+            practice_web.main(flags, on_ready=ready, authorization=sudo_session)
         finally:
-            # Website cleanup finishes before unloading only its selected models.
-            errors = []
-            for model in state['models']:
-                try:
-                    unload_model(model)
-                except AMError as error:
-                    errors.append(str(error))
-            if errors:
-                raise AMError('Website stopped, but model unloading could not be confirmed: '+'; '.join(errors))
+            try:
+                # Keep credentials alive until all active container cleanup has finished.
+                errors = []
+                for model in state['models']:
+                    try:
+                        unload_model(model)
+                    except AMError as error:
+                        errors.append(str(error))
+                if errors:
+                    raise AMError('Website stopped, but model unloading could not be confirmed: '+'; '.join(errors))
+            finally:
+                if sudo_session:
+                    sudo_session.close()
 
 
 def stop(unload_model, model=PRACTICE_MODEL):

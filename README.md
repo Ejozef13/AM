@@ -20,6 +20,10 @@ python am.py off
 python am.py status
 ```
 
+The launch terminal remains open while you study. Managed startup maintains
+Docker authorization during normal use; [renewal after sleep](docs/docker-access.md)
+happens there without restarting the app.
+
 Stopping cancels active work, cleans up containers, and unloads the selected
 models. Shared Ollama and Docker services remain available. Practice sessions
 and editor drafts are saved locally in SQLite. Wait for the draft-save status
@@ -111,6 +115,7 @@ practice website.
 
 ## Guides
 
+- [Docker authorization and all-day practice](docs/docker-access.md)
 - [Desktop start/stop commands and independent Open WebUI](docs/desktop-commands.md)
 - [Project map and editing guide](docs/project-map.md)
 - [Saved learning and privacy](docs/saved-learning.md)
@@ -118,8 +123,8 @@ practice website.
 - [PDF notes and retrieval](docs/notes-and-retrieval.md)
 - [Validation, demo, and live benchmark](docs/validation.md)
 - [Release status and roadmap](docs/roadmap.md)
-- [Generation, review, and accuracy limitations](docs/ai-generated-practice.md)
-- [Python runner](docs/code-runner.md) · [Java/C/C++ setup](docs/multilanguage-practice.md)
+- [Generation, review, and accuracy limitations](docs/verification.md)
+- [Java/C/C++ setup](docs/multilanguage-practice.md)
 - [Open WebUI configuration](docs/open-webui.md)
 
 ## Development checks

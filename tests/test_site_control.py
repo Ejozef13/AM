@@ -110,6 +110,23 @@ class SiteControlTests(unittest.TestCase):
         self.assertEqual(responses,[503])
         self.assertEqual(self.models,{'other-model'})
 
+    def test_managed_sudo_launch_starts_renewal_and_off_stops_it(self):
+        docker=self.path/'docker'
+        docker.write_text('#!/bin/sh\nif [ "$1" = info ] && [ "$AM_TEST_AUTHORIZED" != 1 ]; then exit 1; fi\ncase "$1" in info|image) exit 0;; *) exit 99;; esac\n')
+        sudo=self.path/'sudo'
+        sudo.write_text('#!'+sys.executable+'\nimport os,sys\nfrom pathlib import Path\narguments=sys.argv[1:]\nwith Path(os.environ["AM_TEST_SUDO_LOG"]).open("a") as stream: stream.write(" ".join(arguments)+"\\n")\nif arguments in (["-v"],["-n","-v"]): raise SystemExit(0)\nif arguments[:2]==["-n","docker"]:\n os.environ["AM_TEST_AUTHORIZED"]="1"; os.execvp("docker",arguments[1:])\nraise SystemExit(1)\n')
+        sudo.chmod(0o700)
+        log=self.path/'sudo.log'; self.environment['AM_TEST_SUDO_LOG']=str(log)
+        state=self.start()
+        deadline=time.monotonic()+3
+        while time.monotonic()<deadline and '-n -v' not in log.read_text(): time.sleep(.01)
+        self.assertIn('-n -v',log.read_text())
+        self.assertEqual(self.command('off').returncode,0)
+        self.process.wait(timeout=3)
+        before=log.read_text(); time.sleep(.1)
+        self.assertEqual(log.read_text(),before)
+        self.log.seek(0); self.assertIn('refreshed while AM runs',self.log.read())
+
     def test_stale_pid_record_never_signals_an_unrelated_process(self):
         with patch.dict(os.environ,{'AM_RUNTIME_DIR':str(self.path/'runtime')}):
             site_control.save_state({'root':str(ROOT),'pid':os.getpid(),'start':'incorrect-start-time',

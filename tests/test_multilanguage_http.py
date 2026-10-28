@@ -72,7 +72,7 @@ class LanguageHttpTests(unittest.TestCase):
             self.assertEqual(result['error_code'], 'docker_authorization_required')
             self.assertNotIn('passed', result)
             self.assertIn('Ctrl+Z', result['error'])
-            self.assertNotIn('restart', result['error'])
+            self.assertIn('No restart is needed', result['error'])
             self.assertIs(self.app.sessions.sessions[view['session_id']], session)
             self.assertEqual(session.attempts, {})
             self.assertFalse(self.app.busy.locked())

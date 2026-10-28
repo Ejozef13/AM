@@ -4,7 +4,7 @@
 
 | Check | Result | Elapsed |
 | --- | --- | --- |
-| Default regression discovery | 123 passed, 23 optional checks skipped | 19.460 s |
+| Default regression discovery | 130 passed, 23 optional checks skipped | 24.825 s |
 | Real Python runner suite | 17 passed | 52.363 s |
 | Real Java/C/C++ runner suite | 10 passed | 489.727 s |
 | New structure matrix + encoding checks | 3 test methods passed; 12 real calls across four languages | 138.629 s |
@@ -20,6 +20,12 @@ numbers, draft save, complete server restart, restore without regeneration,
 hints, grading, summary, export/delete, and mobile overflow. Its model and runner
 responses are controlled regression fixtures. It proves application behavior,
 not a live model's question quality or latency.
+
+Credential lifecycle checks use real controlled subprocesses rather than real
+sudo/passwords. They verify refresh beyond a simulated expiry, terminal renewal,
+immediate renewal requests from failed grading operations, and clean cancellation
+on shutdown. Managed startup/stop is tested with controlled Docker/Ollama services.
+The desktop's actual sudo policy remains authoritative; [details](docker-access.md).
 
 ## Demo artifacts
 
@@ -47,10 +53,10 @@ Remote CI status must be checked on GitHub; configuring it is not proof it ran.
 
 ## Live GPT-OSS measurements
 
-There is no running Ollama/model in this cloud environment. The recorded
-[environment report](generation-environment.json) has `status: unavailable`,
-zero attempted generations, and null success-rate/latency fields. It would be
-misleading to report fixture or runner results as live generation accuracy.
+Live model measurements must be made against the installed desktop model.
+Unit/browser fixtures and runner checks cannot establish its generation success
+rate or latency. One-off benchmark JSON belongs in ignored `benchmark-results/`,
+not in the application source tree.
 
 Run a real preparation benchmark on the desktop, with no concurrent generation:
 

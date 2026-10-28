@@ -36,6 +36,7 @@ The stylesheet comments are section markers, not generated code.
 AM/
 ├── am.py                       Public on/off/status and model-only commands
 ├── site_control.py             Website ownership, model loading, clean shutdown
+├── sudo_session.py             Refresh/renew Docker credentials while AM runs
 ├── am_core.py                  Local Ollama HTTP client and model defaults
 ├── chat.py                     Optional terminal chat used by am.py chat
 ├── practice_web.py             Loopback HTTP server and browser API
