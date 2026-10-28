@@ -47,6 +47,7 @@ AM/
 ├── progress_store.py           SQLite, activity, goals, and review schedule
 ├── learning_paths.py           Curriculum topic lists (no questions)
 ├── note_retrieval.py           Bounded PDF extraction and passage retrieval
+├── web_research.py             Read-only documentation search/fetch, URL policy
 ├── structures.py               Tagged encodings and Python node adapters
 ├── native_structures.py        Native node types/builders/serializers
 ├── generation_diagnostics.py   Optional local rejected-generation reports
@@ -81,7 +82,7 @@ and results panel are the local coding workspace. Regression fixtures stay only
 in `tests/`, where model and Docker responses can be checked repeatably; they are
 not accessible as student practice content. Shared validators, image pins, and
 runtime setup tools remain part of the app. Existing search configuration is
-kept for the user's separate service; the practice generator does not call it.
+kept for the user's separate service; the practice generator can use its JSON results when web research is selected.
 
 ## What happens when you build a session
 
@@ -100,7 +101,8 @@ flowchart TD
 
 Invalid drafts receive bounded repair attempts. Unresolved failures stop
 preparation; they never silently become another topic or a prewritten exercise.
-The reviewer receives the task and notes, not the author's reference or tests.
+The reviewer receives the task, notes, and optional web passages, not the author's reference or tests. Mistyped expectations can use executed reference agreement
+only after separate semantic approval; both programs are rechecked afterward.
 
 ## Runtime data outside Git
 

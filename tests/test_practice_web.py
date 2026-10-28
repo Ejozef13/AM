@@ -4,6 +4,7 @@ import json
 import io
 from pathlib import Path
 import threading
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import urllib.error
@@ -11,7 +12,8 @@ import urllib.request
 
 from code_runner import RunnerError, DockerAuthorizationError
 from practice_web import PracticeApp, make_server
-from ai_exercises import validate_draft
+from ai_exercises import validate_draft, OllamaExerciseGenerator
+from generation_diagnostics import DiagnosticRecorder
 from test_multilanguage_generation import native_draft
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +77,26 @@ class PracticeWebTests(unittest.TestCase):
         self.assertEqual(self.request('/api/run', {'source': 'fixture'})[0], 400)
         self.assertEqual(self.request('/api/hint', {'index': 0})[0], 400)
         self.runner.run.assert_not_called()
+
+    def test_failed_preparation_download_is_current_and_is_not_a_benchmark_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            recorder=DiagnosticRecorder(Path(directory),stream=io.StringIO())
+            self.app.sessions.generator=OllamaExerciseGenerator(self.runner,diagnostics=recorder)
+            self.app.diagnostics=True
+            invalid={'done':True,'message':{'content':'{}'}}
+            with patch('ai_exercises.api',side_effect=[invalid,invalid]):
+                status,raw,_=self.request('/api/session',{'language':'python','topic':'functions','count':1})
+            result=json.loads(raw)
+            self.assertEqual(status,503)
+            self.assertEqual(result['diagnostic_url'],'/api/diagnostic')
+            status,raw,_=self.request('/api/diagnostic')
+            report=json.loads(raw)
+            self.assertEqual(status,200)
+            self.assertEqual(report['attempts'][-1]['requested_topic'],'functions')
+            self.assertEqual(report['attempts'][-1]['language'],'python')
+            self.assertNotIn('requested',report)
+            self.request('/api/session',{'language':'unavailable','topic':'functions'})
+            self.assertEqual(self.request('/api/diagnostic')[0],404)
 
     def test_reply_tolerates_a_browser_disconnecting_during_headers_or_body(self):
         for field, error in [('end_headers', ConnectionResetError()), ('write', BrokenPipeError())]:

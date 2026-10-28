@@ -4,7 +4,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from ai_exercises import (AuthorDraftError, DraftRejected, OllamaExerciseGenerator, ReviewerTestMismatch,
+from ai_exercises import (AuthorDraftError, DraftRejected, OllamaExerciseGenerator, TestExpectationMismatch,
                           bind_evidence, cases, note_excerpts, validate_draft)
 from am_core import AMError
 from code_runner import RunnerError
@@ -36,8 +36,9 @@ def reviewed(wrong=True):
 
 
 def correction(value=False):
-    return {'approved': True, 'feedback': 'The literal backslash, n, and space are not symmetric.',
-            'corrections': [{'test_index': 2, 'expected': value}]}
+    approved={'approved':True,'feedback':'The literal characters are not symmetric.','confirmed_indices':[5]}
+    if value: approved['corrections']=[{'test_index':5,'expected':True}]
+    return approved
 
 
 def response(value):
@@ -68,10 +69,10 @@ class ReviewRepairTests(unittest.TestCase):
     def test_reproduces_actual_reviewer_wrong_expected_value(self):
         lesson = validate_draft(bind_evidence(authored(), note_excerpts(NOTES)), NOTES, 'introductory')
         count = len(lesson['tests']); lesson['tests'].extend(cases(reviewed()['tests'], 'Review'))
-        with self.assertRaises(ReviewerTestMismatch) as caught:
+        with self.assertRaises(TestExpectationMismatch) as caught:
             self.generator.check_references(lesson, REVIEWER, count)
         problem = caught.exception.problems[0]
-        self.assertEqual(problem['test_index'], 2)
+        self.assertEqual(problem['test_index'], 5)
         self.assertEqual(problem['args'], [LITERAL])
         self.assertTrue(problem['expected'])
         self.assertFalse(problem['observed_by_both'])
@@ -94,10 +95,10 @@ class ReviewRepairTests(unittest.TestCase):
         self.assertNotIn('reference_solution', repair_request['exercise'])
         self.assertNotIn('tests', repair_request['exercise'])
         self.assertEqual(events[0]['stage'], 'review-tests')
-        allowed = api.call_args_list[2].args[1]['format']['properties']['corrections']
-        self.assertEqual(allowed['items']['properties']['test_index']['enum'], [2])
-        self.assertEqual(allowed['minItems'], 1)
-        self.assertEqual(allowed['maxItems'], 1)
+        allowed = api.call_args_list[2].args[1]['format']['properties']['confirmed_indices']
+        self.assertEqual(allowed['items']['enum'],[5])
+        self.assertEqual(allowed['minItems'],0)
+        self.assertEqual(allowed['maxItems'],1)
         # Two failed observations, followed by two new runs with the corrected expected value.
         self.assertEqual(sum(args == [LITERAL] and source != STARTER for source, _, args in self.runner.calls), 4)
 
@@ -137,22 +138,24 @@ class ReviewRepairTests(unittest.TestCase):
         lesson = {'entrypoint': 'keys', 'reference_solution': 'author fixture', 'tests': [
             {'name': 'Draft 1', 'args': [{'a': 1, 'b': 2}], 'expected': ['a', 'b']},
             {'name': 'Draft 2', 'args': [{'b': 2, 'a': 1}], 'expected': ['a', 'b']}]}
-        with self.assertRaises(AuthorDraftError):
+        with self.assertRaises(TestExpectationMismatch) as caught:
             self.generator.check_references(lesson, 'reviewer fixture', 2)
 
     def test_patch_cannot_remove_cases_change_inputs_or_correct_other_indices(self):
-        problems = [{'test_index': 2}]
-        for changes in ([], [{'test_index': 0, 'expected': False}],
-                        [{'test_index': 2, 'expected': False, 'args': ['another input']}],
-                        [{'test_index': True, 'expected': False}],
-                        [{'test_index': 2, 'expected': float('nan')}]):
-            with self.subTest(changes=changes), self.assertRaises(DraftRejected):
-                self.generator.apply_corrections(reviewed(), correction() | {'corrections': changes}, problems)
-        original = reviewed()
-        fixed = self.generator.apply_corrections(original, correction(), problems)
-        self.assertEqual(len(fixed['tests']), len(original['tests']))
-        self.assertEqual(fixed['reference_solution'], original['reference_solution'])
-        self.assertTrue(original['tests'][2]['expected'])
+        original={'tests':cases(authored()['tests'],'Draft')+cases(reviewed()['tests'],'Review'),
+                  'reference_solution':REFERENCE}
+        problem={'test_index':5,'owner':'reviewer','args':[LITERAL],'expected':True,'observed_by_both':False}
+        for indices in ([],[0],[5,5],[True]):
+            with self.subTest(indices=indices),self.assertRaises(DraftRejected):
+                self.generator.apply_corrections(original,correction()|{'confirmed_indices':indices},[problem])
+        for extra in ({'corrections':[]},{'args':['another input']},{'expected':float('nan')}):
+            with self.assertRaises(DraftRejected):
+                self.generator.apply_corrections(original,correction()|extra,[problem])
+        fixed=self.generator.apply_corrections(original,correction(),[problem])
+        self.assertEqual(len(fixed['tests']),len(original['tests']))
+        self.assertEqual(fixed['reference_solution'],original['reference_solution'])
+        self.assertTrue(original['tests'][5]['expected'])
+        self.assertFalse(fixed['tests'][5]['expected'])
 
 
 if __name__ == '__main__':

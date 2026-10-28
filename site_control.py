@@ -11,6 +11,7 @@ import time
 
 from am_core import AMError, PRACTICE_MODEL, api
 from sudo_session import SudoSession
+from web_research import ensure_configured_search
 
 ROOT = Path(__file__).resolve().parent
 
@@ -126,6 +127,7 @@ def serve(args, start_ollama, unload_model):
                 sudo_session = SudoSession().start()
                 print('Docker authorization is refreshed while AM runs. Keep this terminal open; '
                       'password renewal after system sleep happens here without restarting AM.', flush=True)
+            print("Web references:",ensure_configured_search(ROOT,["docker"] if direct else ["sudo","-n","docker"]),flush=True)
             start_ollama()
             models = list(dict.fromkeys([args.model, args.review_model or args.model]))
             for model in models:

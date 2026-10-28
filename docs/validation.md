@@ -4,11 +4,12 @@
 
 | Check | Result | Elapsed |
 | --- | --- | --- |
-| Default regression discovery | 134 passed, 24 optional checks skipped | 23.698 s |
+| Default regression discovery | 148 passed, 25 optional checks skipped | 24.064 s |
 | Real Python runner suite | 17 passed | 52.363 s |
 | Real Java/C/C++ runner suite | 10 passed | 489.727 s |
 | New structure matrix + encoding checks | 3 test methods passed; 12 real calls across four languages | 138.629 s |
 | Printable-ASCII protocol regression + real transport | 4 methods passed; 5 real Java/C++/C calls | 96.804 s |
+| Author expectation typo regression | 3 methods passed; 5 real Java container calls | 95.676 s |
 | Real HTTP/browser workflow | Passed | See repeatable smoke test below |
 
 The structure matrix covers nonempty lists, sparse trees, cyclic adjacency
@@ -16,11 +17,21 @@ graphs, empty structures, and input mutation. Native compilation uses the actual
 restricted container path. Docker here uses `vfs`; timings include container
 creation and are not predictions of desktop performance.
 
-The browser test checks PDF upload, goal changes, syntax highlighting, line
+The browser test checks retrieval status/source links, correct diagnostic download,
+PDF upload, goal changes, syntax highlighting, line
 numbers, draft save, complete server restart, restore without regeneration,
 hints, grading, summary, export/delete, and mobile overflow. Its model and runner
 responses are controlled regression fixtures. It proves application behavior,
 not a live model's question quality or latency.
+
+The Java expectation regression reproduces a mistyped expected reversal while
+two independently supplied programs agree on the correct result. It uses a
+controlled AI verification response, then executes the corrected expectation
+against both real programs and checks the buggy starter. The model cannot write
+replacement answers in this verification step. The raw uploaded diagnostic is
+not committed. Real public search was unavailable in this environment; retrieval
+and its failure disclosure have controlled unit/browser coverage. Desktop search
+availability and live GPT-OSS quality still need desktop measurements.
 
 Credential lifecycle checks use real controlled subprocesses rather than real
 sudo/passwords. They verify refresh beyond a simulated expiry, terminal renewal,
@@ -65,7 +76,7 @@ Run a real preparation benchmark on the desktop, with no concurrent generation:
 cd ~/Projects/AM
 python am.py model-on
 sudo -v
-python tools/benchmark_generation.py --language c --topic "Linked lists" --samples 3 --output benchmark-results/c-linked-lists.json
+python tools/benchmark_generation.py --language java --topic "printing" --web-search --samples 3
 ```
 
 Repeat for `python`, `java`, and `cpp`, using representative topics and enough
@@ -73,6 +84,8 @@ samples to expose failures. Keep runtime/model settings consistent. Reports
 contain elapsed preparation time, accepted combined case counts, repair-stage
 counts, final response token/completion metadata, failures, and installed model
 details. Generated code, notes, and hidden reasoning text are not exported.
+The default output is `benchmark-results/preparation-benchmark.json`, a different
+report type from the failed-session diagnostic downloaded from the app.
 
 `preparation_rate` measures how many requested drafts passed the complete
 review/execution pipeline. It is **not a correctness/learning score**. The median

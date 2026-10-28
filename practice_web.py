@@ -32,6 +32,7 @@ class PracticeApp:
         self.sessions = SessionStore(generator, persistence)
         self.persistence = persistence
         self.authorization = authorization
+        self.last_error_run_id = None
         self.progress = "Ready"
         self.diagnostics = diagnostics
         self.stop_event = threading.Event()
@@ -160,6 +161,17 @@ def make_server(app, port=8090):
             if self.path == '/api/export':
                 self.reply(200, app.persistence.export() if app.persistence else {})
                 return
+            if self.path == '/api/diagnostic':
+                recorder=app.sessions.generator.diagnostics
+                if (not app.diagnostics or not isinstance(recorder,DiagnosticRecorder)
+                        or not app.last_error_run_id or recorder.run_id!=app.last_error_run_id):
+                    self.reply(404,{'error':'No diagnostic for the current failed request.'})
+                else:
+                    try:
+                        self.reply(200,json.loads(recorder.path.read_text(encoding='utf-8')))
+                    except (OSError,ValueError):
+                        self.reply(404,{'error':'The diagnostic file is no longer available.'})
+                return
             if self.path == "/api/progress":
                 self.reply(200, {"message": app.progress, "busy": app.busy.locked()})
                 return
@@ -227,6 +239,9 @@ def make_server(app, port=8090):
                     app.sessions.sessions.clear()
                     status, payload = 200, {'cleared':True}
                 elif self.path == "/api/session":
+                    app.last_error_run_id=None
+                    recorder=app.sessions.generator.diagnostics
+                    previous_run=recorder.run_id if isinstance(recorder,DiagnosticRecorder) else None
                     app.progress = "Preparing your practice session…"
                     key, session = app.sessions.create(data)
                     status, payload = 201, app.sessions.view(key, session, app.public_lesson)
@@ -247,9 +262,13 @@ def make_server(app, port=8090):
             except ValueError as error:
                 status, payload = 400, {"error": str(error)}
             except AMError as error:
-                detail = str(error)
-                suffix = "" if "No session was created" in detail else " No session was created."
-                status, payload = 503, {"error": f"AM could not prepare this session: {detail}{suffix}"}
+                recorder=app.sessions.generator.diagnostics
+                if (self.path=='/api/session' and isinstance(recorder,DiagnosticRecorder)
+                        and recorder.run_id!=previous_run):
+                    app.last_error_run_id=recorder.run_id
+                status,payload=503,{'error':'AM could not verify a fresh exercise. Your notes and settings are still here.',
+                                    'details':str(error),
+                                    'diagnostic_url':'/api/diagnostic' if app.last_error_run_id and app.diagnostics else None}
             except DockerAuthorizationError as error:
                 if app.authorization:
                     app.authorization.request_renewal()

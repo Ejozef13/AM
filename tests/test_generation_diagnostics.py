@@ -22,6 +22,17 @@ class DiagnosticsTests(unittest.TestCase):
             self.assertEqual(recorder.path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(recorder.directory.stat().st_mode & 0o777, 0o700)
 
+    def test_completion_marks_only_the_matching_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            recorder = DiagnosticRecorder(directory, io.StringIO())
+            recorder({'run_id': 'current', 'requested_topic': 'printing'})
+            recorder.finish('old', 'accepted')
+            self.assertEqual(json.loads(recorder.path.read_text())['status'], 'in_progress')
+            recorder.finish('current', 'accepted')
+            saved = json.loads(recorder.path.read_text())
+            self.assertEqual(saved['status'], 'accepted')
+            self.assertEqual(saved['requested_topic'], 'printing')
+
     def test_attempts_are_bounded_and_new_runs_replace_old_trace(self):
         with tempfile.TemporaryDirectory() as directory:
             recorder = DiagnosticRecorder(directory, io.StringIO())

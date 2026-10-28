@@ -9,7 +9,7 @@ fallback. Fixed test fixtures are not accessible through the application.
 | Stage | What happens | What can reject it |
 | --- | --- | --- |
 | Input | Validate language/runtime, difficulty, session length, topic, notes size | Missing input, unavailable compiler, invalid limits |
-| Context | Extract PDF text if uploaded; retrieve relevant passages from long notes | Invalid/scanned PDF, size bounds, no matching long-note passages |
+| Context | Extract PDF text; retrieve note passages and optional web documentation | Invalid/scanned PDF, size bounds, no matching long-note passages |
 | Author | Local model writes task, constraints, starter bug, correct reference, hints, tests, and evidence ID | Incomplete or malformed response |
 | Structure | Parse JSON/code syntax; validate fields, types, signature, arguments, source bounds, and notes origin | Broken interface, invalid native types, invented excerpt ID |
 | Blind review | Separate model call sees task, notes, starter, and hints; derives another solution and cases | Ambiguous/irrelevant task, incorrect hints, invalid code/tests |
@@ -48,14 +48,21 @@ shown for debugging and is not compared as the graded answer.
 
 - At most two author drafts per exercise.
 - At most two reviewer attempts for an otherwise unchanged draft.
-- If both references agree with each other but disagree with a reviewer expected
-  value, one bounded correction request checks that inconsistency against the
-  specification. Agreement alone does not authorize the correction.
-- Corrections can replace only the flagged reviewer expected values, not remove
-  tests, change inputs, or rewrite the task. The corrected cases run again.
-- Author-reference failures include exact test arguments plus string lengths,
-  literal representations, and character codes in repair feedback. Test names
-  such as "empty string" do not override the actual input characters.
+- Both independent solutions run before an author-written expected value can
+  terminate preparation. A typo in either author's or reviewer's expectation can
+  be considered for correction only when both programs return the same value
+  without mutation/errors.
+- A separate semantic verification call checks those observed values against
+  the unchanged task, notes, sources, and literal inputs. It must reject ambiguous
+  tasks or contradictory case labels. Agreement alone does not authorize repair.
+- The verifier returns only an approval, feedback, and confirmed case indices.
+  It cannot write replacement answers, inputs, source code, or omit cases.
+- After approval, the host copies the *executed* observed values into exactly the
+  flagged expectations and reruns both programs. This avoids another manually
+  typed expected string. Program disagreement, invalid approval, mutation, or
+  failed rechecking cannot publish an exercise.
+- Rejected author expectations return to bounded author repair; rejected
+  reviewer-only expectations stop the preparation rather than changing the task.
 - Starter repair receives the failing input and runtime evidence, while keeping
   the task and valid domain. It still must expose a wrong answer safely.
 - Infrastructure failures abort preparation; they do not become student failures.
@@ -105,6 +112,7 @@ miss cases. Treat the observed evidence as the scope of the result.
 | --- | --- |
 | Author/review/repair orchestration | `ai_exercises.py` |
 | Student input and note retrieval | `study_input.py`, `note_retrieval.py` |
+| Optional documentation retrieval and source policy | `web_research.py` |
 | Source/JSON checks | `lesson_validation.py`, `language_contracts.py` |
 | Python/container transport and host comparison | `code_runner.py` |
 | Native compile/run and marshaling | `compiled_runner.py`, `compiled_driver.py`, `native_harness.py`, `native_structures.py` |
@@ -112,5 +120,9 @@ miss cases. Treat the observed evidence as the scope of the result.
 | Saved drafts, activity, goals, review schedule | `progress_store.py` |
 
 See [validation and demo](validation.md) for measured checks and the repeatable
-live-model benchmark. No live generation accuracy percentage is inferred from
+live-model benchmark. Fresh variation IDs/seeds and recent-task metadata reduce repeated content;
+identical recent tasks request another variation. Optional web references have
+explicit source links and availability status; see [web references](web-references.md).
+
+No live generation accuracy percentage is inferred from
 unit tests or the controlled browser demo.

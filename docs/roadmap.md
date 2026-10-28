@@ -7,7 +7,8 @@
 - Learning-path topic selection, activity-based goals, streaks, and due reviews.
 - Bounded linked-list, heap-indexed tree, and adjacency-graph inputs in Python,
   Java, C, and C++, with mutation checks and restricted execution.
-- Text-based PDF extraction and local lexical retrieval for longer notes.
+- Text-based PDF extraction, local lexical note retrieval, and optional bounded
+  web documentation retrieval with visible citations/status.
 - A repeatable browser demo, screenshots/video, GitHub Actions regression/browser
   configuration, and a live-model benchmark tool.
 
@@ -28,7 +29,7 @@ CI configuration is committed; a GitHub workflow run must confirm its remote res
 - A richer editor with completion and compiler diagnostics linked to source lines.
 - More adaptive study recommendations, calibrated against learning outcomes.
 - Additional node output contracts, weighted graphs, and flexible tree encodings.
-- Embedding retrieval, OCR, and source-quality evaluation if lexical retrieval
+- Embedding retrieval, OCR, and deeper source-quality evaluation if lexical retrieval
   proves insufficient for real notes.
 - Import/migration for exported study data, multiple local profiles, and encryption
   options for sensitive notes.

@@ -6,6 +6,7 @@ import uuid
 
 from study_input import study_input
 from note_retrieval import retrieve
+from web_research import WebResearch
 
 
 @dataclass
@@ -19,6 +20,7 @@ class PracticeSession:
     drafts: dict = field(default_factory=dict)
     citations: list = field(default_factory=list)
     topic: str = ""
+    research: dict = field(default_factory=dict)
 
     def summary(self):
         items = []
@@ -60,15 +62,23 @@ class SessionStore:
         topic, notes, count, difficulty = study_input(data, allowed)
         generator = self.generator.for_language(data['language']) if hasattr(self.generator, 'for_language') else self.generator
         context, citations = retrieve(topic, notes)
+        if type(data.get('web_search',False)) is not bool:
+            raise ValueError('Web search must be enabled or disabled explicitly.')
+        research={'status':'disabled','sources':[],'warning':''}
+        if data.get('web_search'):
+            generator.progress('Retrieving documentation references…')
+            research=WebResearch().gather(data['language'],topic)
+            citations += [{'source':item['title'],'url':item['url'],'excerpt':item['excerpt']} for item in research['sources']]
+        recent=self.persistence.recent_tasks(data['language'],topic) if self.persistence else []
+        generator.research_sources=research['sources']
+        generator.recent_tasks=[item['title'] for item in recent]
+        generator.seen_fingerprints={item['fingerprint'] for item in recent}
         lessons, plan, label = generator.build(topic, context, difficulty, count)
-        key, session = self.publish(lessons, plan, label)
-        session.citations, session.topic = citations, topic or plan['focus']
-        self.save(key)
-        return key, session
+        return self.publish(lessons, plan, label, citations=citations, topic=topic or plan['focus'], research=research)
 
-    def publish(self, lessons, plan, label):
+    def publish(self, lessons, plan, label, **metadata):
         key = uuid.uuid4().hex
-        session = PracticeSession(lessons, plan, label)
+        session = PracticeSession(lessons, plan, label, **metadata)
         self.sessions[key] = session
         self.save(key)
         return key, session
@@ -134,4 +144,4 @@ class SessionStore:
                 "lesson": public_lesson(session.lessons[session.index]),
                 "draft": session.drafts.get(session.index, {}).get('source'),
                 "draft_version": session.drafts.get(session.index, {}).get('version', 0),
-                "citations": session.citations}
+                "citations": session.citations, "research":session.research}

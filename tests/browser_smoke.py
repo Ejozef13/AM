@@ -14,6 +14,8 @@ from playwright.sync_api import sync_playwright, expect
 from ai_exercises import OllamaExerciseGenerator
 from practice_web import PracticeApp, make_server
 from progress_store import ProgressStore
+from generation_diagnostics import DiagnosticRecorder
+import io
 from test_ai_exercises import FixtureRunner, NOTES, REFERENCE, draft, review, response
 from test_note_retrieval import pdf_bytes
 
@@ -27,7 +29,8 @@ def main():
         database=Path(directory)/'progress.sqlite3'
         def start():
             runner=FixtureRunner(); generator=OllamaExerciseGenerator(runner)
-            app=PracticeApp(runner,generator,persistence=ProgressStore(database))
+            generator.diagnostics=DiagnosticRecorder(Path(directory)/'diagnostics',stream=io.StringIO())
+            app=PracticeApp(runner,generator,persistence=ProgressStore(database),diagnostics=True)
             server=make_server(app,0)
             thread=threading.Thread(target=server.serve_forever,daemon=True); thread.start()
             return server,thread
@@ -48,9 +51,23 @@ def main():
                 page.locator('#notes-file').set_input_files(str(pdf))
                 expect(page.locator('#notes')).to_have_value(re.compile('Factorial practice notes.'))
             page.locator('#notes').fill(NOTES); page.locator('#topic').fill('Functions and recursion')
-            with patch('ai_exercises.api',side_effect=[response(draft()),response(review())]) as model:
-                page.locator('#start').click(); page.locator('#workspace').wait_for(state='visible')
-                assert model.call_count==2
+            research={'status':'retrieved','provider':'controlled-fixture','warning':'',
+                      'sources':[{'id':'web-1','url':'https://docs.python.org/3/tutorial/',
+                                  'title':'Python documentation','excerpt':'Functions return values; recursion calls a function again.'}]}
+            with patch('practice_sessions.WebResearch') as search:
+                search.return_value.gather.return_value=research
+                invalid={'done':True,'message':{'content':'{}'}}
+                with patch('ai_exercises.api',side_effect=[invalid,invalid]):
+                    page.locator('#start').click()
+                    expect(page.locator('#error')).to_contain_text('could not verify')
+                    page.locator('#error-details summary').click()
+                    with page.expect_download() as download:
+                        page.locator('#error-report').click()
+                    assert download.value.suggested_filename=='am-preparation-diagnostic.json'
+                with patch('ai_exercises.api',side_effect=[response(draft()),response(review())]) as model:
+                    page.locator('#start').click(); page.locator('#workspace').wait_for(state='visible')
+                    assert model.call_count==2
+                search.return_value.gather.assert_called_with('python','Functions and recursion')
             page.locator('#source').fill(REFERENCE)
             expect(page.locator('#draft-status')).to_contain_text('Draft saved')
             # Save B, then return to already-saved A while B is queued: A must win.
@@ -71,6 +88,9 @@ def main():
             page.get_by_role('button',name='Resume python:',exact=False).click()
             page.locator('#workspace').wait_for(state='visible')
             assert page.locator('#source').input_value()==REFERENCE
+            expect(page.locator('#research-status')).to_contain_text('1 web documentation')
+            page.locator('#retrieval-details summary').click()
+            expect(page.locator('#retrieval-sources a')).to_have_attribute('href','https://docs.python.org/3/tutorial/')
             page.locator('#hint').click(); page.get_by_text('Check the base case.',exact=True).wait_for()
             page.locator('#run').click()
             page.get_by_role('heading',name='All 6 tests passed. You found the fix.').wait_for()

@@ -50,15 +50,15 @@ class LiteralRepairTests(unittest.TestCase):
         runner=LengthRunner(); events=[]
         generator=OllamaExerciseGenerator(runner,language='java',diagnostics=events.append)
         broken=author(); repaired=deepcopy(broken); repaired['tests'][0]['args']=['']
-        with patch('ai_exercises.api',side_effect=[reply(broken),reply(review()),reply(repaired),reply(review())]) as api:
+        with patch('ai_exercises.api',side_effect=[reply(broken),reply(review()),reply({'approved':False,'feedback':'The empty label contradicts its two quote characters.','confirmed_indices':[]}),reply(repaired),reply(review())]) as api:
             lessons,_,_=generator.build('String handling','','standard',1)
-        request=json.loads(api.call_args_list[2].args[1]['messages'][1]['content'])
+        request=json.loads(api.call_args_list[3].args[1]['messages'][1]['content'])
         self.assertEqual(request['previous_draft']['tests'][0]['args'],['""'])
         self.assertIn('"length": 2',request['previous_failure'])
         self.assertIn('"codepoints": [34, 34]',request['previous_failure'])
         self.assertIn('"expected": 0',request['previous_failure'])
-        self.assertIn('"actual": 2',request['previous_failure'])
+        self.assertIn('"observed_by_both": 2',request['previous_failure'])
         self.assertTrue(any(case['args']==[''] and case['expected']==0 for case in lessons[0]['tests']))
         self.assertTrue(any(case['args']==['""'] and case['expected']==2 for case in lessons[0]['tests']))
-        self.assertEqual(api.call_count,4)
+        self.assertEqual(api.call_count,5)
         self.assertIsInstance(next(event for event in events if event['stage']=='author')['error'],str)

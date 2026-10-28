@@ -29,6 +29,7 @@
       <details><summary>Local data and privacy</summary><p class="muted">Sessions, generated questions, notes excerpts, drafts, and activity are saved on this computer. Export includes that private content. Delete clears study records; exported files and optional diagnostic logs are separate.</p><div class="study-actions"><button id="export-data" class="secondary" type="button">Export study data</button><button id="delete-data" class="text-button" type="button">Delete saved study data</button></div></details>
     </section>
     <p id="error" role="alert" hidden></p>
+    <details id="error-details" hidden><summary>Preparation details</summary><pre id="error-detail-text"></pre><a id="error-report" class="source-link" href="/api/diagnostic" download="am-preparation-diagnostic.json" hidden>Download this preparation diagnostic</a><p class="muted">The report may include generated code and notes excerpts.</p></details>
     <p id="loading" role="status" aria-live="polite">Loading practice options…</p>
     <section id="setup" class="card setup-card" hidden aria-labelledby="setup-title">
       <div class="card-heading"><span class="eyebrow">YOUR NEXT CHALLENGE</span><h2 id="setup-title">What are we studying today?</h2><p class="muted">Start small. One exercise is a good place to begin.</p></div>
@@ -39,6 +40,8 @@
         <textarea id="notes" rows="6" maxlength="200000" placeholder="Paste the definitions, examples, or course excerpt you want to focus on."></textarea>
         <div class="upload-row"><label class="file-label" for="notes-file">Add a notes file</label><input id="notes-file" type="file" accept=".txt,.md,.markdown,.py,.java,.c,.cpp,.h,.hpp,.pdf"><span id="file-status" class="muted"></span></div>
         <p class="muted">Text, Markdown, code, or text-based PDF notes. Long notes are searched locally for relevant passages. Scanned PDFs need OCR. Uploaded code is context, not executed.</p>
+        <label class="web-option" for="web-search"><input id="web-search" type="checkbox" checked> Use web documentation references</label>
+        <p class="muted">Search sends only your language and topic. Your uploaded notes and code stay local. If references are unavailable, the session can still use your notes and model.</p>
         <div class="setup-options"><div><label for="difficulty">Difficulty</label><select id="difficulty"><option value="introductory">Introductory</option><option value="standard" selected>Standard</option><option value="challenging">Challenging</option></select></div><div><label for="count">Session length</label><select id="count"><option value="1" selected>1 exercise</option><option value="2">2 exercises</option><option value="3">3 exercises</option><option value="4">4 exercises</option><option value="5">5 exercises</option></select></div></div>
         <div class="scope-note"><p class="eyebrow" id="mode-title">YOUR PRACTICE SESSION</p><p id="family-list"></p><p class="muted" id="mode-description"></p></div>
         <p id="planner-label" class="muted"></p>
@@ -60,7 +63,7 @@
         <div id="editor-language" class="editor-label">Python · function submission</div>
         <textarea id="source" maxlength="16000" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="editor-help"></textarea>
         <p id="editor-help" class="muted">Tab inserts four spaces. Ctrl+Enter or ⌘+Enter runs tests. Drafts save locally after typing. Check the save status before closing.</p>
-        <p id="draft-status" class="muted" role="status">Draft not changed.</p><details id="retrieval-details" hidden><summary>Sources used for this question</summary><div id="retrieval-sources"></div></details>
+        <p id="research-status" class="muted" role="status"></p><p id="draft-status" class="muted" role="status">Draft not changed.</p><details id="retrieval-details" hidden><summary>Notes and web references retrieved</summary><div id="retrieval-sources"></div></details>
         <div class="run-bar"><button id="run" class="primary" type="button">Run tests <span aria-hidden="true">→</span></button><span id="activity" role="status" aria-live="polite"></span></div>
         <section id="results" hidden aria-labelledby="result-title"><h2 id="result-title"></h2><p id="result-note" class="muted"></p><div id="test-list"></div></section>
         <div class="next-row"><button id="next-exercise" class="secondary" type="button">Next exercise →</button><span class="muted">You can move on and see unfinished exercises in your summary.</span></div>

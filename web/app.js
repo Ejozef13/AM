@@ -34,10 +34,14 @@ const labels = {compile_error: "Compiler error", passed: "Passed", failed: "Inco
   output_limit: "Output limit", syntax_error: "Syntax error", runtime_error: "Runtime error",
   execution_error: "Execution stopped", protocol_error: "Invalid execution response"};
 
-function showError(message = "") { $("error").textContent = message; $("error").hidden = !message; }
+function showError(message = "", details = "", diagnosticUrl = "") {
+  $("error").textContent=message; $("error").hidden=!message;
+  $("error-details").hidden=!details; $("error-detail-text").textContent=details;
+  $("error-report").hidden=diagnosticUrl!=="/api/diagnostic";
+}
 function setBusy(value) {
   busy = value;
-  for (const id of ["run", "reset", "start", "sample", "next-exercise", "finish-session", "another-session", "notes-file", "difficulty", "count", "topic"]) $(id).disabled = value;
+  for (const id of ["run", "reset", "start", "sample", "next-exercise", "finish-session", "another-session", "notes-file", "difficulty", "count", "topic", "web-search"]) $(id).disabled = value;
   $("hint").disabled = value || !lesson || nextHint >= lesson.hint_count;
   $("source").readOnly = value; $("notes").readOnly = value;
   document.querySelectorAll('.language[data-available="true"]').forEach((button) => { button.disabled = value; });
@@ -45,7 +49,7 @@ function setBusy(value) {
 async function post(path, data) {
   const response = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data)});
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Request failed.");
+  if (!response.ok) { const error=new Error(result.error || "Request failed."); error.details=result.details || ""; error.diagnosticUrl=result.diagnostic_url || ""; throw error; }
   return result;
 }
 function addText(parent, tag, text, className = "") {
@@ -66,7 +70,7 @@ async function perform(message, operation) {
   if (busy) return;
   setBusy(true); showError(); $("loading").hidden = false; $("loading").textContent = message;
   try { await operation(); }
-  catch (error) { showError(error.message || "Connection failed. Your editor content is still here."); }
+  catch (error) { showError(error.message || "Connection failed. Your editor content is still here.", error.details, error.diagnosticUrl); }
   finally { $("loading").hidden = true; setBusy(false); }
 }
 function renderSession(view) {
@@ -110,9 +114,16 @@ function renderSession(view) {
   codeEditor.sync();
   $('retrieval-sources').replaceChildren();
   for(const citation of view.citations || []) {
-    addText($('retrieval-sources'),'h3',citation.source); addText($('retrieval-sources'),'blockquote',citation.excerpt);
+    addText($('retrieval-sources'),'h3',citation.source);
+    if(citation.url) {
+      try { const url=new URL(citation.url); if(url.protocol==='https:') {
+        const link=addText($('retrieval-sources'),'a',url.href,'source-link'); link.href=url.href; link.target='_blank'; link.rel='noopener noreferrer';
+      } } catch(_) { /* A malformed citation never becomes an executable link. */ }
+    }
+    addText($('retrieval-sources'),'blockquote',citation.excerpt);
   }
   $('retrieval-details').hidden=!(view.citations || []).length;
+  $('research-status').textContent=view.research?.warning || (view.research?.status==='retrieved' ? `${view.research.sources.length} web documentation reference(s) retrieved.` : '');
   $("focus-evidence").hidden = false; $("focus-evidence").open = false;
   $("focus-reason").textContent = view.plan.reason;
   $("notes-quote").textContent = view.plan.notes_quote || "Selected from your topic; no notes were supplied.";
@@ -164,7 +175,7 @@ $("setup-form").addEventListener("submit", (event) => {
     }, 2000);
     try {
     const view = await post("/api/session", {language: selectedLanguage, topic: $("topic").value,
-      notes: $("notes").value, difficulty: $("difficulty").value, count: Number($("count").value)});
+      notes: $("notes").value, difficulty: $("difficulty").value, count: Number($("count").value), web_search: $("web-search").checked});
     renderSession(view);
     if(typeof refreshDashboard === "function") refreshDashboard();
     } finally { clearInterval(timer); }
@@ -251,7 +262,7 @@ fetch("/api/setup").then(async (response) => {
   }
   $("mode-title").textContent = "AI-GENERATED PRACTICE";
   $("family-list").textContent = "Questions built around your topic and notes";
-  $("mode-description").textContent = "AM drafts a debugging question. A separate review solves it independently, then both solutions must pass the combined tests. Start with one exercise. Notes guide the question; web research is not enabled.";
+  $("mode-description").textContent = "AM generates a fresh question from your topic, notes, and optional web references. A separate review solves it; both programs run against combined tests. Inconsistent expectations need explicit verification before using executed results.";
   const missingRuntime = setup.mode === "ai-generated" && setup.languages.some((language) => !language.available);
   $("runtime-setup").hidden = !missingRuntime;
   $("runtime-setup").textContent = missingRuntime ? "To enable Java, C, and C++: run sudo -v, then python tools/setup_compiled_runtime.py in your terminal, and restart this app." : "";

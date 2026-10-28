@@ -155,3 +155,7 @@ footer { text-align: center; color: var(--muted); font-size: .75rem; margin: 34p
 .token-number { color: #ffcc87; }
 .token-comment { color: #a3b5ab; font-style: italic; }
 @media (forced-colors: active) { .code-highlight { display: none; } .code-editor #source { color: CanvasText; -webkit-text-fill-color: CanvasText; } }
+
+.web-option { display:flex !important; align-items:center; gap:10px; }
+.web-option input { width:18px; height:18px; accent-color:var(--accent); }
+.source-link { color:var(--accent); font-size:.8rem; overflow-wrap:anywhere; }

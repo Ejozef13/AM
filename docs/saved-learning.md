@@ -53,3 +53,7 @@ Open **Local data and privacy** on the dashboard:
 Export is a readable backup, not an import/migration format yet. For a complete
 filesystem backup, stop AM and copy the `.am-data/` folder. The app uses a private
 SQLite file and ordinary transactions; do not edit its JSON while AM is running.
+
+Recent generated-task fingerprints/titles are kept to avoid identical repeats.
+They are metadata rather than reusable exercise templates and are cleared by
+the same Delete study data control.

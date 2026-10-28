@@ -93,7 +93,9 @@ The [project map](docs/project-map.md) explains every module and the request flo
 ## How it works
 
 The local model drafts a question, buggy starter, reference, hints, and tests.
-A separate blind review derives another solution and test set. Both references
+A separate blind review derives another solution and test set. If their execution
+agrees but an expected value is mistyped, explicit semantic approval is required
+before copying the observed value and rerunning checks. Both references
 must pass the combined cases, and the starter must show a wrong answer without
 crashing on the checked inputs. Student grading uses execution and comparisons;
 AI does not decide whether a submission passed. Output/printing topics use
@@ -101,8 +103,8 @@ functions returning the text to display; stdout is debugging evidence.
 
 New requests ask for 3–5 small cases per call and use typed native contracts.
 Failed drafts receive bounded repairs. Model agreement and passing tests are
-useful evidence, not proof of correctness. No web search or embedding service is enabled. Long notes use bounded local
-lexical retrieval before generation.
+useful evidence, not proof of correctness. Optional web documentation retrieval supplements local note passages. Search
+uses only the language/topic and discloses unavailable sources.
 Bounded linked-list, tree, and graph inputs are supported across all four
 languages; see the structured-input guide for calling conventions and limits.
 
@@ -121,6 +123,7 @@ practice website.
 - [Project map and editing guide](docs/project-map.md)
 - [Saved learning and privacy](docs/saved-learning.md)
 - [Structured inputs](docs/structured-inputs.md)
+- [Web documentation and randomized generation](docs/web-references.md)
 - [PDF notes and retrieval](docs/notes-and-retrieval.md)
 - [Validation, demo, and live benchmark](docs/validation.md)
 - [Release status and roadmap](docs/roadmap.md)

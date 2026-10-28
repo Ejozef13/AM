@@ -27,7 +27,9 @@ most 10,000 characters. Page/section and character references appear in the
 exercise's **Sources used for this question** panel. Relevant material near the
 end of a long document is included when it matches the query.
 
-This is local lexical retrieval, not embedding search or web research. There is
+Uploaded notes use local lexical retrieval, without embeddings. Optional
+[web references](web-references.md) use only the separate language/topic query;
+notes themselves are not sent to search. There is
 no vector database, external API key, or extra model. If a long document has no
 matching terms, preparation asks for a matching topic or focused excerpt rather
 than pretending to have grounded the question. A source match shows where a
