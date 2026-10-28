@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from ai_exercises import DraftRejected, OllamaExerciseGenerator
-from language_contracts import language_instruction
+from language_contracts import language_instruction, review_test_schema, typed_cases
 from test_ai_exercises import NOTES, draft, review, response, FixtureRunner
 from test_multilanguage_generation import native_draft, native_review, NativeFixtureRunner, reply
 
@@ -68,6 +68,33 @@ class GenerationOptimizationTests(unittest.TestCase):
         self.assertEqual(schema['expected']['type'],'integer')
         self.assertNotIn('C++',language_instruction('c'))
         self.assertNotIn('Java',language_instruction('c'))
+
+    def test_native_review_tuple_schema_is_ollama_compatible_and_arity_stays_checked(self):
+        # Ollama rejects boolean `items` schemas even though JSON Schema allows them.
+        # Cover every supported parameter type and empty/mixed parameter lists.
+        for parameters in ([], ['int_array'], ['int_array', 'int'],
+                           ['long', 'double', 'bool', 'string', 'int']):
+            signature = {'parameters': parameters, 'returns': 'int'}
+            schema = review_test_schema(signature)
+            def check_items(node):
+                if isinstance(node, dict):
+                    if 'items' in node:
+                        self.assertIsInstance(node['items'], dict)
+                    for value in node.values():
+                        check_items(value)
+                elif isinstance(node, list):
+                    for value in node:
+                        check_items(value)
+            check_items(schema)
+            args = schema['items']['properties']['args']
+            self.assertEqual(args['minItems'], len(parameters))
+            self.assertEqual(args['maxItems'], len(parameters))
+            with self.assertRaisesRegex(ValueError, 'argument count'):
+                typed_cases(signature, [{'name': 'extra input',
+                    'args': [0] * (len(parameters) + 1), 'expected': 0}])
+        with self.assertRaisesRegex(ValueError, 'requires an integer'):
+            typed_cases({'parameters': ['int'], 'returns': 'int'},
+                        [{'name': 'wrong type', 'args': ['code expression'], 'expected': 0}])
 
     def test_truncation_metadata_records_counts_without_hidden_reasoning(self):
         generator = OllamaExerciseGenerator(FixtureRunner())

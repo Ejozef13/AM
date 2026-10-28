@@ -105,11 +105,13 @@ def value_schema(kind):
 def review_test_schema(signature):
     """Constrain model tests to logical arguments, not the expanded C ABI."""
     parameters = signature['parameters']
+    # Ollama's grammar converter requires object schemas for items. Do not add
+    # items:false after the tuple: maxItems already forbids extra arguments.
     return {'type':'array', 'minItems':3, 'maxItems':5, 'items':{
         'type':'object', 'additionalProperties':False, 'required':['name','args','expected'],
         'properties':{'name':{'type':'string','minLength':1,'maxLength':100},
             'args':{'type':'array','minItems':len(parameters),'maxItems':len(parameters),
-                    'prefixItems':[value_schema(kind) for kind in parameters], 'items':False},
+                    'prefixItems':[value_schema(kind) for kind in parameters]},
             'expected':value_schema(signature['returns'])}}}
 
 
