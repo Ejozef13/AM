@@ -37,8 +37,8 @@ Status:
 python am.py status
 ```
 
-Stopping loses in-memory practice sessions. It unloads the selected practice
-models and leaves the shared Ollama and Docker services running.
+Wait for the draft-save status before closing. Saved sessions and progress
+survive stop/start. Stopping unloads the selected practice models and leaves the shared Ollama and Docker services running.
 
 ## Open WebUI chat, independently
 
@@ -80,3 +80,10 @@ ollama show am-study:latest
 The two websites share Ollama. For smooth performance, finish one generation
 before starting another. Unloading a shared model affects both clients' memory
 use; a later message can load it again. Neither stop command deletes models.
+
+## PDF notes and saved progress
+
+Install Poppler once for PDF uploads: `sudo apt install poppler-utils`, or
+`sudo pacman -S poppler` on Arch. Notes retrieval is local. Saved drafts, sessions,
+and goals live in `.am-data/progress.sqlite3`; use Resume on the dashboard after
+restarting. Export/delete controls are under Local data and privacy.

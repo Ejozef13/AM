@@ -130,3 +130,28 @@ footer { text-align: center; color: var(--muted); font-size: .75rem; margin: 34p
   button { transition: filter .15s, border-color .15s; }
   button:hover:not(:disabled) { filter: brightness(1.08); }
 }
+
+/* Saved activity, review queues, and the local code editor */
+.study-dashboard { max-width: 850px; margin: 0 auto 28px; }
+.study-dashboard h2 { margin: 0; }
+.study-dashboard .section-top { flex-wrap: wrap; }
+#study-stats { font-size: .85rem; color: var(--accent); }
+.goal-row, .study-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.goal-row input { width: 76px; }
+.study-dashboard details { margin-top: 18px; }
+.study-dashboard summary { cursor: pointer; }
+.path-topic { margin: 4px; color: var(--ink); background: var(--field); border-color: var(--line); }
+.code-editor { display: flex; height: 360px; border: 1px solid var(--line); border-radius: 0 0 10px 10px; overflow: hidden; background: var(--field); resize: vertical; min-height: 180px; }
+.line-numbers { flex: 0 0 46px; text-align: right; color: var(--muted); border-right: 1px solid var(--line); overflow: hidden; user-select: none; }
+.code-area { position: relative; flex: 1; min-width: 0; }
+.code-editor pre, .code-editor #source { font: 14px/1.7 var(--font-code); tab-size: 4; padding: 16px 12px; margin: 0; white-space: pre; overflow-wrap: normal; border-radius: 0; background: transparent; }
+.code-highlight { position: absolute; inset: 0; overflow: hidden; pointer-events: none; color: var(--ink); }
+.code-editor #source { position: absolute; inset: 0; min-height: 0; height: 100%; width: 100%; border: 0; resize: none; color: transparent; caret-color: var(--ink); -webkit-text-fill-color: transparent; }
+.code-editor #source::selection { background: #60874677; }
+.code-editor:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
+.code-editor #source:focus-visible { outline: none; }
+.token-keyword { color: #c4a8ff; }
+.token-string { color: #c5ec91; }
+.token-number { color: #ffcc87; }
+.token-comment { color: #a3b5ab; font-style: italic; }
+@media (forced-colors: active) { .code-highlight { display: none; } .code-editor #source { color: CanvasText; -webkit-text-fill-color: CanvasText; } }

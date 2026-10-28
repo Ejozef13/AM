@@ -49,7 +49,7 @@ class SiteControlTests(unittest.TestCase):
         binary.write_text('#!/bin/sh\ncase "$1" in info|image) exit 0;; *) exit 99;; esac\n')
         binary.chmod(0o700)
         self.environment={**os.environ,'PATH':str(self.path)+os.pathsep+os.environ['PATH'],
-            'AM_RUNTIME_DIR':str(self.path/'runtime'),
+            'AM_RUNTIME_DIR':str(self.path/'runtime'), 'AM_DATA_DIR':str(self.path/'data'),
             'AM_OLLAMA_URL':f'http://127.0.0.1:{self.ollama.server_port}'}
         self.log=open(self.path/'website.log','w+')
         self.process=None
@@ -96,7 +96,7 @@ class SiteControlTests(unittest.TestCase):
     def test_off_cancels_an_active_model_request_and_does_not_wait_for_its_full_timeout(self):
         state=self.start();responses=[]
         def create_session():
-            data=json.dumps({'language':'c','topic':'count occurrences','count':1}).encode()
+            data=json.dumps({'language':'python','topic':'count occurrences','count':1}).encode()
             address=f"http://127.0.0.1:{state['port']}"
             request=urllib.request.Request(address+'/api/session',data=data,
                 headers={'Origin':address,'Content-Type':'application/json'})

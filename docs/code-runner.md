@@ -23,7 +23,7 @@ a temporary workspace, dropped capabilities, and resource/output limits.
 This is a local prototype, not a public hostile-code execution service.
 
 Syntax errors and runtime errors are returned as test evidence. Infrastructure
-failures produce no overall grade. The app keeps the in-memory session so the
+failures produce no overall grade. The app keeps the session and persists drafts/progress so the
 student can restore Docker access and retry. Passing cases is not proof for all
 possible inputs.
 

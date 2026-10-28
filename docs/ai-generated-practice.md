@@ -92,15 +92,17 @@ or answer keys. Session responses omit solutions, expected tests, unrevealed
 hints, and reviewer feedback. Test results disclose expected/actual returns after
 submission as learning evidence, not hidden interview tests.
 
-Notes limits and in-memory retention match the previous milestone: UTF-8 text,
-Markdown, and code files; 48 KB per file, 12,000 combined characters; ephemeral
-sessions in RAM. The app saves no notes or progress to disk. No web search, RAG,
-PDF parsing, or online source verification is implemented. All supplied notes go
-to the local model directly. Excerpt IDs confirm origin, not interpretation or
-relevance. The reviewer sees the full notes once, without repeated focus-plan or skill
-metadata, to check whether they support the exercise. Unknown IDs are rejected rather than silently
-substituting an unrelated passage. With no notes, the selected ID and quote are
-empty. Short notes remain usable; there is no arbitrary eight-character minimum.
+The setup form accepts UTF-8 text/Markdown/code files and text-based PDFs.
+Combined extracted notes are bounded at 200,000 characters. Longer material uses
+local lexical passage retrieval before the model sees at most 10,000 characters;
+selected sources are visible in the exercise. PDF extraction uses bounded local
+Poppler execution; scanned PDFs need OCR. See [notes and retrieval](notes-and-retrieval.md).
+
+Generated sessions, selected excerpts, attempts, and editor drafts are stored in
+local SQLite and can be resumed after restarting. See [saved learning](saved-learning.md)
+for retention, export/delete, and privacy. No web search or online verification is
+performed. Excerpt IDs confirm origin, not interpretation or relevance. Unknown
+IDs are rejected, and no-notes sessions use an empty evidence ID.
 
 All sessions require AI generation. There is no built-in exercise bank,
 keyword planner, template fallback, or standalone default lesson endpoint.
@@ -259,6 +261,5 @@ behavior detected by the runtime, and resource failures reject the draft. The
 bounded author retry receives the failing case name and input, runtime message,
 and instructions to preserve the task and valid input domain while making the
 starter safe to execute. This improves repair evidence without guaranteeing a
-model will produce an acceptable draft. Custom linked-list node types are not
-supported as runner parameters; current native inputs use the documented basic
-types and integer arrays.
+model will produce an acceptable draft. Bounded linked-list, tree, and graph inputs now use explicit tagged JSON and
+trusted node adapters in all four languages; see [structured inputs](structured-inputs.md).

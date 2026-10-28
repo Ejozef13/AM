@@ -1,0 +1,2 @@
+# Optional browser verification and screenshot/video capture only.
+playwright==1.62.0

@@ -16,16 +16,21 @@ from generation_diagnostics import DiagnosticRecorder
 from compiled_runner import CompiledRunner
 from study_input import LANGUAGES
 from practice_sessions import SessionStore
+from progress_store import ProgressStore
+from note_retrieval import extract_pdf
+from structures import STRUCTURE_GUIDE
+import os
 
 ROOT = Path(__file__).resolve().parent
 
 
 class PracticeApp:
-    def __init__(self, runner, generator, runtimes=None, diagnostics=False):
+    def __init__(self, runner, generator, runtimes=None, diagnostics=False, persistence=None):
         self.runner = runner
         self.runtimes = runtimes or {'python': runner}
         self.busy = threading.Lock()
-        self.sessions = SessionStore(generator)
+        self.sessions = SessionStore(generator, persistence)
+        self.persistence = persistence
         self.progress = "Ready"
         self.diagnostics = diagnostics
         self.stop_event = threading.Event()
@@ -59,7 +64,8 @@ class PracticeApp:
                             ("source", "separate_review", "distinct_models", "reference_runs")}
                            | {"review_test_repairs": lesson["quality"].get("review_test_repairs", 0)},
                 "test_count": len(lesson["tests"]),
-                "hint_count": len(lesson["hints"])}
+                "hint_count": len(lesson["hints"]),
+                "structure_help": STRUCTURE_GUIDE + ("Graph has size, degree[24], adj[24][24]." if lesson["language"] == "c" else "Graph.adj holds adjacency rows.")}
 
     def run(self, source, session_data):
         # Source is passed only to the container, never exec'd on the host.
@@ -67,7 +73,7 @@ class PracticeApp:
             raise ValueError("Enter some code first.")
         if len(source.encode("utf-8")) > 16000:
             raise ValueError("Keep the submission below 16,000 UTF-8 bytes.")
-        _, session = self.sessions.get(session_data)
+        key, session = self.sessions.get(session_data)
         lesson = session.lessons[session.index]
         runner = self.runner
         if lesson['language'] != 'python':
@@ -81,9 +87,9 @@ class PracticeApp:
             result = grade_case(runner, source, lesson["entrypoint"], case,
                                 lesson["grading"]["forbid_input_mutation"])
             evidence = {"args": arguments, "args_json": json.dumps(arguments, ensure_ascii=False)}
-            for key in ('expected', 'actual'):
-                if key in result:
-                    evidence[key + '_json'] = json.dumps(result[key], ensure_ascii=False)
+            for value_key in ('expected', 'actual'):
+                if value_key in result:
+                    evidence[value_key + '_json'] = json.dumps(result[value_key], ensure_ascii=False)
             results.append({**result, **evidence})
         response = {"results": results, "passed": sum(r["status"] == "passed" for r in results),
                     "total": len(results), "complete": True}
@@ -91,6 +97,10 @@ class PracticeApp:
             previous = session.attempts.get(session.index, {}).get("attempts", 0)
             session.attempts[session.index] = {"attempts": previous + 1,
                                               "passed": response["passed"]}
+        self.sessions.save(key)
+        if self.persistence:
+            self.persistence.record(key, session.index, lesson['language'], session.topic or lesson['title'],
+                                    response['passed'], response['total'])
         return response
 
 
@@ -140,12 +150,23 @@ def make_server(app, port=8090):
                                  "mode": "ai-generated",
                                  "planner_label": generator.label})
                 return
+            if self.path == '/api/dashboard':
+                if app.persistence:
+                    self.reply(200, {**app.persistence.dashboard(), 'active':app.sessions.active()})
+                else:
+                    self.reply(200, {'active':app.sessions.active()})
+                return
+            if self.path == '/api/export':
+                self.reply(200, app.persistence.export() if app.persistence else {})
+                return
             if self.path == "/api/progress":
                 self.reply(200, {"message": app.progress, "busy": app.busy.locked()})
                 return
             assets = {"/": ("index.html", "text/html; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-                      "/app.css": ("app.css", "text/css; charset=utf-8")}
+                      "/app.css": ("app.css", "text/css; charset=utf-8"),
+                      "/editor.js": ("editor.js", "text/javascript; charset=utf-8"),
+                      "/study.js": ("study.js", "text/javascript; charset=utf-8")}
             if self.path not in assets:
                 self.reply(404, {"error": "Not found."})
                 return
@@ -161,7 +182,8 @@ def make_server(app, port=8090):
                 self.reply(403, {"error": "Run requests must originate from this local app."})
                 return
             if self.path not in {"/api/run", "/api/hint", "/api/session",
-                                  "/api/session/next", "/api/session/finish"}:
+                                  "/api/session/next", "/api/session/finish", "/api/draft", "/api/session/resume",
+                                  "/api/goal", "/api/data/clear", "/api/notes"}:
                 self.reply(404, {"error": "Not found."})
                 return
             if (self.headers.get("Content-Type", "").split(";")[0] != "application/json"
@@ -170,7 +192,7 @@ def make_server(app, port=8090):
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 1 <= length <= 65536:
+                if not 1 <= length <= (5700000 if self.path == '/api/notes' else 1300000 if self.path == '/api/session' else 65536):
                     self.reply(413, {"error": "Request is too large or empty."})
                     return
                 data = json.loads(self.rfile.read(length))
@@ -184,7 +206,26 @@ def make_server(app, port=8090):
                 self.reply(429, {"error": "An operation is already active. Wait for it to finish."})
                 return
             try:
-                if self.path == "/api/session":
+                if self.path == '/api/draft':
+                    status, payload = 200, app.sessions.save_draft(data)
+                elif self.path == '/api/session/resume':
+                    key = data.get('session_id')
+                    if not isinstance(key, str) or key not in app.sessions.sessions:
+                        raise ValueError('No saved session with that ID.')
+                    status, payload = 200, app.sessions.view(key, app.sessions.sessions[key], app.public_lesson)
+                elif self.path == '/api/notes':
+                    status, payload = 200, {'text':extract_pdf(data.get('pdf'))}
+                elif self.path == '/api/goal':
+                    if not app.persistence:
+                        raise ValueError('Progress storage is unavailable.')
+                    app.persistence.set_goal(data.get('goal'))
+                    status, payload = 200, app.persistence.dashboard()
+                elif self.path == '/api/data/clear':
+                    if app.persistence:
+                        app.persistence.clear()
+                    app.sessions.sessions.clear()
+                    status, payload = 200, {'cleared':True}
+                elif self.path == "/api/session":
                     app.progress = "Preparing your practice session…"
                     key, session = app.sessions.create(data)
                     status, payload = 201, app.sessions.view(key, session, app.public_lesson)
@@ -272,7 +313,8 @@ def main(argv=None, on_ready=None):
             diagnostics=DiagnosticRecorder(ROOT / ".am-diagnostics") if args.diagnostics else None,
             runtimes=runtimes)
         server = make_server(PracticeApp(runner, generator, runtimes,
-                                       diagnostics=args.diagnostics), args.port)
+                                       diagnostics=args.diagnostics,
+                                       persistence=ProgressStore(Path(os.environ.get('AM_DATA_DIR', str(ROOT/'.am-data')))/'progress.sqlite3')), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)

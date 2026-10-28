@@ -1,5 +1,8 @@
 """Trusted serializers and typed calls; no expected answers enter compiled code."""
 import json
+from structures import STRUCTURE_TYPES
+from native_structures import (NODE_DEFINITIONS, C_GRAPH, CPP_GRAPH, JAVA_DEFINITIONS,
+                               JAVA_SERIALIZERS, TREE_COLLECT, declarations as structure_declarations, emit as emit_structure)
 from language_contracts import function_header, native_type, typed_value, validate_signature
 
 C_HEADERS = '#include <stdio.h>\n#include <stdbool.h>\n#include <string.h>\n#include <math.h>\n#include <stdlib.h>\n'
@@ -63,6 +66,8 @@ def scalar_literal(language, kind, value):
 
 
 def emit_c(kind, expression, length=None, cpp=False):
+    if kind in STRUCTURE_TYPES:
+        return emit_structure(kind, expression, cpp)
     if kind == 'int_array':
         size = f'{expression}.size()' if cpp else length
         return (f'printf("["); for(size_t am_i=0;am_i<(size_t)({size});am_i++) {{ '
@@ -85,7 +90,10 @@ def build_harness(language, signature, args):
     declarations, calls = [], []
     for index, (kind, value) in enumerate(zip(signature['parameters'], args)):
         name = f'am_arg{index}'
-        if kind == 'int_array':
+        if kind in STRUCTURE_TYPES:
+            declarations.extend(structure_declarations(language,kind,value,name))
+            calls.append(name)
+        elif kind == 'int_array':
             values = ','.join(map(str, value))
             if language == 'java':
                 declarations.append(f'int[] {name} = new int[]{{{values}}};')
@@ -104,8 +112,8 @@ def build_harness(language, signature, args):
     call = ', '.join(calls)
     result_type = native_type(language, signature['returns'])
     if language == 'java':
-        after = ' + "," + '.join(f'json(am_arg{i})' for i in range(len(args))) or '""'
-        return ('public class AMHarness {\n' + JAVA_JSON + '\npublic static void main(String[] ignored) throws Exception {\n' +
+        after = ' + "," + '.join(f'structureArg(am_arg{i},"{kind}")' if kind in STRUCTURE_TYPES else f'json(am_arg{i})' for i,kind in enumerate(signature['parameters'])) or '""'
+        return (JAVA_DEFINITIONS + 'public class AMHarness {\n' + JAVA_SERIALIZERS + JAVA_JSON + '\npublic static void main(String[] ignored) throws Exception {\n' +
                 '\n'.join(declarations) + f'\n{result_type} am_result = Solution.solve({call});\n' +
                 'System.out.println("\\nAM_RESULT:{\\"value\\":" + json(am_result) + '
                 f'",\\"args_after\\":[" + {after} + "]}}");\n' + '}}\n')
@@ -113,14 +121,14 @@ def build_harness(language, signature, args):
     headers = C_HEADERS + ('#include <vector>\n#include <string>\n#include <cstddef>\n' if is_cpp else '')
     prototype = function_header(language, signature)
     # Type-check the student definition against the expected native signature.
-    prelude = headers + prototype + ';\n'
+    prelude = headers + NODE_DEFINITIONS + (CPP_GRAPH if is_cpp else C_GRAPH) + prototype + ';\n'
     after = []
     for index, kind in enumerate(signature['parameters']):
         if index:
             after.append('printf(",");')
         after.append(emit_c(kind, f'am_arg{index}', f'am_arg{index}_len', is_cpp))
     result = emit_c(signature['returns'], 'am_result', cpp=is_cpp)
-    main = ('\n' + C_QUOTE + '\nint main(void) {\n' + '\n'.join(declarations) +
+    main = ('\n' + TREE_COLLECT + C_QUOTE + '\nint main(void) {\n' + '\n'.join(declarations) +
             f'\n{result_type} am_result = solve({call});\n' +
             'printf("\\nAM_RESULT:{\\"value\\":");\n' + result +
             '\nprintf(",\\"args_after\\":[");\n' + '\n'.join(after) + '\nprintf("]}\\n"); return 0;\n}\n')

@@ -1,6 +1,6 @@
 "use strict";
 
-// State lives in this tab. No uploads, source, or progress go into localStorage.
+// Sessions and drafts are saved by the local server, never in localStorage.
 const $ = (id) => document.getElementById(id);
 let lesson;
 let nextHint = 0;
@@ -9,6 +9,26 @@ let submittedSource = null;
 let session = null;
 let selectedLanguage = "python";
 let lastRun = null;
+let draftVersion = 0;
+let draftTimer;
+let draftQueue = Promise.resolve();
+let savedSource = null;
+async function saveDraft() {
+  clearTimeout(draftTimer);
+  const current = session;
+  const source = $('source').value;
+  if (!current) return draftQueue;
+  draftQueue = draftQueue.catch(()=>{}).then(async()=>{
+    if (session !== current || source === savedSource) return;
+    $('draft-status').textContent = 'Saving draft…';
+    try {
+      const result = await post('/api/draft',{session_id:current.session_id,lesson_index:current.lesson_index,source,version:draftVersion});
+      draftVersion=result.version; savedSource=source;
+      $('draft-status').textContent = 'Draft saved on this computer.';
+    } catch(error) { $('draft-status').textContent = 'Draft NOT saved: '+error.message; throw error; }
+  });
+  return draftQueue;
+}
 const languageLabels = {python: "Python", java: "Java", c: "C", cpp: "C++"};
 const labels = {compile_error: "Compiler error", passed: "Passed", failed: "Incorrect result", timeout: "Time limit",
   output_limit: "Output limit", syntax_error: "Syntax error", runtime_error: "Runtime error",
@@ -34,6 +54,7 @@ function addText(parent, tag, text, className = "") {
 }
 function sessionFields() { return {session_id: session.session_id, lesson_index: session.lesson_index}; }
 function screen(name) {
+  $("study-dashboard").hidden = name !== "setup";
   $("setup").hidden = name !== "setup"; $("workspace").hidden = name !== "exercise";
   $("session-bar").hidden = name !== "exercise"; $("session-summary").hidden = name !== "summary";
   document.querySelectorAll("[data-step]").forEach((step) => {
@@ -59,7 +80,7 @@ function renderSession(view) {
       addText(section, "p", item.passed === null ? "Not attempted" : `${item.passed}/${item.total} tests passed · ${item.attempts} attempt(s)`);
       $("summary-items").append(section);
     }
-    session = null; return;
+    session = null; if(typeof refreshDashboard === 'function') refreshDashboard(); return;
   }
   session = view; lesson = view.lesson; nextHint = 0; submittedSource = null; lastRun = null;
   screen("exercise"); $("results").hidden = true; $("hints").replaceChildren();
@@ -81,8 +102,17 @@ function renderSession(view) {
   $("editor-language").textContent = `${languageLabels[lesson.language] || lesson.language} · ${lesson.language === "java" ? "Solution class" : "function submission"}`;
   $("signature-details").hidden = !lesson.required_signature;
   $("required-signature").textContent = lesson.required_signature || "";
-  $("signature-help").textContent = lesson.language === "java" ? "Submit a public class named Solution containing this public static method. The runner supplies main." : lesson.language === "c" ? "Submit the function without main. An array parameter uses a pointer and a separate length." : "Submit this free function without main. Standard headers are provided; additional standard includes are allowed.";
-  $("source").value = lesson.starter_code;
+  $("signature-help").textContent = lesson.language === "java" ? "Submit a public class named Solution containing this public static method. The runner supplies main." : lesson.language === "c" ? "Submit the function without main. Array parameters use a pointer and length; node and graph parameters use the supplied types described below." : "Submit this free function without main. Standard headers are provided; additional standard includes are allowed.";
+  $("structure-help").textContent = lesson.structure_help || "";
+  $("source").value = view.draft ?? lesson.starter_code;
+  draftVersion=view.draft_version || 0; savedSource=$('source').value;
+  $('draft-status').textContent = view.draft === null ? 'Starter ready. Your edits will save locally.' : 'Saved session restored.';
+  codeEditor.sync();
+  $('retrieval-sources').replaceChildren();
+  for(const citation of view.citations || []) {
+    addText($('retrieval-sources'),'h3',citation.source); addText($('retrieval-sources'),'blockquote',citation.excerpt);
+  }
+  $('retrieval-details').hidden=!(view.citations || []).length;
   $("focus-evidence").hidden = false; $("focus-evidence").open = false;
   $("focus-reason").textContent = view.plan.reason;
   $("notes-quote").textContent = view.plan.notes_quote || "Selected from your topic; no notes were supplied.";
@@ -113,8 +143,10 @@ async function runTests() {
   if (!source.trim()) { showError("Enter your solution first."); return; }
   await perform(`Running ${lesson.test_count} isolated tests…`, async () => {
     $("results").hidden = true;
+    await saveDraft();
     const result = await post("/api/run", {...sessionFields(), source});
     submittedSource = source; renderResults(result);
+    if(typeof refreshDashboard === "function") refreshDashboard();
   });
 }
 $("setup-form").addEventListener("submit", (event) => {
@@ -134,6 +166,7 @@ $("setup-form").addEventListener("submit", (event) => {
     const view = await post("/api/session", {language: selectedLanguage, topic: $("topic").value,
       notes: $("notes").value, difficulty: $("difficulty").value, count: Number($("count").value)});
     renderSession(view);
+    if(typeof refreshDashboard === "function") refreshDashboard();
     } finally { clearInterval(timer); }
   });
 });
@@ -146,12 +179,14 @@ $("source").addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); runTests(); }
 });
 $("source").addEventListener("input", () => {
+  $('draft-status').textContent='Unsaved changes…';
+  clearTimeout(draftTimer); draftTimer=setTimeout(()=>saveDraft().catch(()=>{}),600);
   if (submittedSource !== null && $("source").value !== submittedSource) $("result-note").textContent = "These results belong to your previous code. Run tests again after editing.";
   else if (submittedSource !== null) $("result-note").textContent = "Results match the code currently in the editor.";
 });
 $("reset").addEventListener("click", () => {
   if ($("source").value !== lesson.starter_code && !confirm("Replace your current code with the starter?")) return;
-  $("source").value = lesson.starter_code; $("results").hidden = true; submittedSource = null; lastRun = null; showError();
+  $("source").value = lesson.starter_code; $("results").hidden = true; submittedSource = null; lastRun = null; codeEditor.sync(); $("source").dispatchEvent(new Event("input")); showError();
 });
 $("hint").addEventListener("click", () => {
   if (busy || !session || nextHint >= lesson.hint_count) return;
@@ -164,14 +199,14 @@ $("hint").addEventListener("click", () => {
 $("next-exercise").addEventListener("click", () => {
   const currentPassed = lastRun && lastRun.passed === lastRun.total && $("source").value === submittedSource;
   if (!currentPassed && !confirm("Move on? The summary will retain this exercise's latest test result, if any.")) return;
-  perform("Opening the next exercise…", async () => { renderSession(await post("/api/session/next", sessionFields())); });
+  perform("Opening the next exercise…", async () => { await saveDraft(); renderSession(await post("/api/session/next", sessionFields())); });
 });
 $("finish-session").addEventListener("click", () => {
-  if (!confirm("Finish this session? Your current editor draft is not saved.")) return;
-  perform("Finishing your session…", async () => { renderSession(await post("/api/session/finish", sessionFields())); });
+  if (!confirm("Finish this session? It will leave the unfinished-session list; completed activity stays saved.")) return;
+  perform("Finishing your session…", async () => { await saveDraft(); renderSession(await post("/api/session/finish", sessionFields())); });
 });
 $("another-session").addEventListener("click", () => {
-  screen("setup"); showError(); $("intro-eyebrow").textContent = "MAKE THE NEXT FEW MINUTES COUNT";
+  screen("setup"); if(typeof refreshDashboard === "function") refreshDashboard(); showError(); $("intro-eyebrow").textContent = "MAKE THE NEXT FEW MINUTES COUNT";
   $("intro-title").textContent = "A little code. A little progress.";
   $("intro-description").textContent = "Pick a language. Bring your notes. Build your debugging skills, one short challenge at a time.";
 });
@@ -179,11 +214,16 @@ $("notes-file").addEventListener("change", async () => {
   const file = $("notes-file").files[0]; if (!file) return;
   setBusy(true);
   try {
-    if (!/\.(txt|md|markdown|py|java|c|cpp|h|hpp)$/i.test(file.name) || file.size > 48000) throw new Error("Choose a UTF-8 text, Markdown, or code file under 48 KB. PDFs and slides are not supported yet.");
-    const text = await file.text();
+    if (!/\.(txt|md|markdown|py|java|c|cpp|h|hpp|pdf)$/i.test(file.name) || file.size > (/\.pdf$/i.test(file.name)?4194304:800000)) throw new Error("Choose text/code below 800 KB or a PDF below 4 MB.");
+    let text;
+    if (/\.pdf$/i.test(file.name)) {
+      const bytes = new Uint8Array(await file.arrayBuffer()); let binary='';
+      for(let offset=0;offset<bytes.length;offset+=8192) binary+=String.fromCharCode(...bytes.subarray(offset,offset+8192));
+      text=(await post('/api/notes',{pdf:btoa(binary)})).text;
+    } else text = await file.text();
     if (/[\u0000\uFFFD]/.test(text)) throw new Error("The file is not supported UTF-8 text.");
     const combined = [$("notes").value.trim(), text.trim()].filter(Boolean).join("\n\n");
-    if (combined.length > 12000) throw new Error("Combined notes exceed 12,000 characters. Use a shorter excerpt.");
+    if (combined.length > 200000) throw new Error("Combined notes exceed 200,000 characters. Use a shorter section.");
     $("notes").value = combined; $("file-status").textContent = `Added ${file.name}`; showError();
   } catch (error) { showError(error.message); }
   finally { $("notes-file").value = ""; setBusy(false); }
@@ -199,12 +239,14 @@ fetch("/api/setup").then(async (response) => {
   for (const language of setup.languages) {
     const button = addText($("languages"), "button", language.label + (language.available ? "" : " · setup needed"), "language");
     button.type = "button"; button.disabled = !language.available; button.title = language.disabled_reason || "";
+    button.dataset.language = language.id;
     button.dataset.available = String(language.available); button.setAttribute("aria-pressed", String(language.id === selectedLanguage));
     button.addEventListener("click", () => {
       selectedLanguage = language.id;
       $("planner-label").textContent = setup.planner_label.replace(/^AI-authored Python exercises/, `AI-authored ${language.label} exercises`);
       document.querySelectorAll(".language").forEach((other) => { other.setAttribute("aria-pressed", "false"); });
       button.setAttribute("aria-pressed", "true");
+      if(typeof refreshDashboard === "function") refreshDashboard();
     });
   }
   $("mode-title").textContent = "AI-GENERATED PRACTICE";
@@ -216,3 +258,7 @@ fetch("/api/setup").then(async (response) => {
   $("planner-label").textContent = setup.planner_label;
   $("loading").hidden = true; screen("setup"); setBusy(false);
 }).catch((error) => { $("loading").hidden = true; showError(error.message); });
+
+window.addEventListener('beforeunload',event=>{
+  if(session && $('source').value!==savedSource) { event.preventDefault(); event.returnValue=''; }
+});

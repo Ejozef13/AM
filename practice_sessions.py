@@ -1,10 +1,11 @@
 """Bounded, in-memory study sessions using AI-generated, execution-checked exercises."""
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import time
 import uuid
 
 from study_input import study_input
+from note_retrieval import retrieve
 
 
 @dataclass
@@ -15,6 +16,9 @@ class PracticeSession:
     created: float = field(default_factory=time.monotonic)
     index: int = 0
     attempts: dict = field(default_factory=dict)
+    drafts: dict = field(default_factory=dict)
+    citations: list = field(default_factory=list)
+    topic: str = ""
 
     def summary(self):
         items = []
@@ -28,13 +32,21 @@ class PracticeSession:
 
 
 class SessionStore:
-    def __init__(self, generator):
+    def __init__(self, generator, persistence=None):
         if generator is None:
             raise ValueError("An AI exercise generator is required.")
         self.generator = generator
+        self.persistence = persistence
         self.sessions = {}
+        if persistence:
+            for key, value in persistence.load_sessions().items():
+                value['attempts'] = {int(k):v for k,v in value.get('attempts',{}).items()}
+                value['drafts'] = {int(k):v for k,v in value.get('drafts',{}).items()}
+                self.sessions[key] = PracticeSession(**value)
 
     def prune(self):
+        if self.persistence:
+            return
         now = time.monotonic()
         for key, session in list(self.sessions.items()):
             if now - session.created > 7200:
@@ -47,13 +59,18 @@ class SessionStore:
         allowed = tuple(self.generator.runtimes) if self.generator is not None and hasattr(self.generator, 'runtimes') else ('python',)
         topic, notes, count, difficulty = study_input(data, allowed)
         generator = self.generator.for_language(data['language']) if hasattr(self.generator, 'for_language') else self.generator
-        lessons, plan, label = generator.build(topic, notes, difficulty, count)
-        return self.publish(lessons, plan, label)
+        context, citations = retrieve(topic, notes)
+        lessons, plan, label = generator.build(topic, context, difficulty, count)
+        key, session = self.publish(lessons, plan, label)
+        session.citations, session.topic = citations, topic or plan['focus']
+        self.save(key)
+        return key, session
 
     def publish(self, lessons, plan, label):
         key = uuid.uuid4().hex
         session = PracticeSession(lessons, plan, label)
         self.sessions[key] = session
+        self.save(key)
         return key, session
 
     def get(self, data):
@@ -73,14 +90,40 @@ class SessionStore:
         if session.index == len(session.lessons):
             summary = session.summary()
             del self.sessions[key]
+            if self.persistence:
+                self.persistence.delete_session(key)
             return {"stage": "summary", "summary": summary}
+        self.save(key)
         return self.view(key, session, public_lesson)
 
     def finish(self, data):
         key, session = self.get(data)
         summary = session.summary()
         del self.sessions[key]
+        if self.persistence:
+            self.persistence.delete_session(key)
         return {"stage": "summary", "summary": summary}
+
+    def save(self, key):
+        if self.persistence:
+            self.persistence.save_session(key, asdict(self.sessions[key]))
+
+    def save_draft(self, data):
+        key, session = self.get(data)
+        source, version = data.get('source'), data.get('version')
+        if not isinstance(source, str) or len(source.encode()) > 16000:
+            raise ValueError('Draft must be text below 16,000 bytes.')
+        previous = session.drafts.get(session.index, {}).get('version', 0)
+        if type(version) is not int or version != previous:
+            raise ValueError('This draft changed in another tab. Resume the session to load its latest version.')
+        session.drafts[session.index] = {'source': source, 'version': previous+1}
+        self.save(key)
+        return {'version': previous+1}
+
+    def active(self):
+        return [{'session_id':key,'title':s.lessons[s.index]['title'],
+                 'language':s.lessons[s.index]['language'], 'number':s.index+1, 'total':len(s.lessons)}
+                for key,s in self.sessions.items()]
 
     @staticmethod
     def view(key, session, public_lesson):
@@ -88,4 +131,7 @@ class SessionStore:
                 "number": session.index + 1, "total": len(session.lessons),
                 "plan": session.lessons[session.index].get("focus_plan", session.plan),
                 "planner_label": session.planner_label,
-                "lesson": public_lesson(session.lessons[session.index])}
+                "lesson": public_lesson(session.lessons[session.index]),
+                "draft": session.drafts.get(session.index, {}).get('source'),
+                "draft_version": session.drafts.get(session.index, {}).get('version', 0),
+                "citations": session.citations}

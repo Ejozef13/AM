@@ -2,9 +2,15 @@
 import json
 import math
 import re
+from structures import STRUCTURE_TYPES, STRUCTURE_GUIDE, validate_structure
 
 LABELS = {'python': 'Python', 'java': 'Java', 'c': 'C', 'cpp': 'C++'}
-TYPES = ('int', 'long', 'double', 'bool', 'string', 'int_array')
+BASIC_TYPES = ('int', 'long', 'double', 'bool', 'string', 'int_array')
+TYPES = BASIC_TYPES + STRUCTURE_TYPES
+
+def return_types(language):
+    return BASIC_TYPES[:-1] if language == 'c' else BASIC_TYPES
+
 NATIVE = ('java', 'c', 'cpp')
 
 
@@ -12,7 +18,7 @@ def signature_schema(language):
     return {'type': 'object', 'additionalProperties': False,
         'properties': {'parameters': {'type': 'array', 'minItems': 0, 'maxItems': 5,
                                       'items': {'type': 'string', 'enum': list(TYPES)}},
-                       'returns': {'type': 'string', 'enum': list(TYPES[:-1] if language == 'c' else TYPES)}},
+                       'returns': {'type': 'string', 'enum': list(return_types(language))}},
         'required': ['parameters', 'returns']}
 
 
@@ -23,12 +29,14 @@ def validate_signature(language, signature):
     if not isinstance(parameters, list) or len(parameters) > 5 or any(
             not isinstance(value, str) or value not in TYPES for value in parameters):
         raise ValueError('Signature needs zero to five supported parameter types.')
-    if not isinstance(returns, str) or returns not in (TYPES[:-1] if language == 'c' else TYPES):
+    if not isinstance(returns, str) or returns not in return_types(language):
         raise ValueError('Unsupported return type for this language; C array returns are not supported.')
     return {'parameters': list(parameters), 'returns': returns}
 
 
 def typed_value(value, kind):
+    if kind in STRUCTURE_TYPES:
+        return validate_structure(value, kind)
     if kind in ('int', 'long'):
         limit = 2**31 - 1 if kind == 'int' else 2**63 - 1
         lower = -(2**31) if kind == 'int' else -(2**63)
@@ -67,6 +75,9 @@ def typed_cases(signature, tests):
 
 
 def native_type(language, kind):
+    if kind in STRUCTURE_TYPES:
+        name = {'linked_list':'ListNode', 'tree':'TreeNode', 'graph':'Graph'}[kind]
+        return name if language == 'java' else ('const '+name+' *')
     return {'java': {'int': 'int', 'long': 'long', 'double': 'double', 'bool': 'boolean',
                      'string': 'String', 'int_array': 'int[]'},
             'c': {'int': 'int', 'long': 'long long', 'double': 'double', 'bool': 'bool',
@@ -92,6 +103,13 @@ def function_header(language, signature):
 
 
 def value_schema(kind):
+    if kind in STRUCTURE_TYPES:
+        key = 'adjacency' if kind == 'graph' else 'values'
+        items = ({'type':'array','maxItems':24,'items':{'type':'integer','minimum':0,'maximum':23}}
+                 if kind == 'graph' else {'anyOf':[value_schema('int'),{'type':'null'}]} if kind == 'tree' else value_schema('int'))
+        return {'type':'object','required':['__type',key], 'additionalProperties':False,
+                'properties':{'__type':{'type':'string','enum':[kind]}, key:{'type':'array',
+                    'maxItems':24 if kind=='graph' else 127 if kind=='tree' else 100, 'items':items}}}
     if kind in ('int', 'long'):
         bits = 32 if kind == 'int' else 64
         return {'type':'integer', 'minimum':-(2**(bits-1)), 'maximum':2**(bits-1)-1}
@@ -134,4 +152,8 @@ def language_instruction(language):
         'Return values, never print results or parse stdin; the trusted harness handles I/O. '
         'Do not mutate inputs, access files/network, spawn processes, or use third-party dependencies. '
         'List valid input bounds and all edge-case behavior in the question. '
-        'Source fields are plain code, without Markdown fences. ')
+        'Source fields are plain code, without Markdown fences. ' + STRUCTURE_GUIDE +
+        'Native structured types are input-only; return a scalar or an allowed int_array. ' +
+        {'c':'Graph has size, degree[24], adj[24][24]. ', 'java':'Graph has int[][] adj. ',
+         'cpp':'Graph has std::vector<std::vector<int>> adj. '}[language] +
+        'Nodes have int val and next/left/right fields. Types are supplied by the harness. ')

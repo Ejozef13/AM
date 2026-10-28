@@ -30,8 +30,8 @@ If sudo credentials expire during a long build, run `sudo -v` and then
 If Docker's sudo authorization expires while studying, keep the browser page
 open. In the same terminal running the website, press Ctrl+Z to suspend it,
 run `sudo -v`, then run `fg` to resume it. Click Run tests again. This retains
-the in-memory exercise and editor contents; restarting the server loses the
-session. Another terminal may have a different sudo timestamp and does not
+the active exercise and editor contents. Saved sessions and autosaved drafts
+also survive a server restart. Another terminal may have a different sudo timestamp and does not
 reliably refresh the launch terminal's authorization.
 
 Authorization failures have a specific response code. Other runner failures
@@ -177,9 +177,10 @@ Passing the combined suite does not prove the question matches its notes or
 cover all valid inputs. Targeted expected-value repairs retain the existing
 explicit reviewer approval and renewed execution checks; agreement alone is
 insufficient. Notes still go directly to local Ollama. There is no web search,
-RAG, automatic source verification, or new model installation in this change.
+web retrieval, automatic source verification, or new model installation. Local
+notes retrieval is documented separately in [notes and retrieval](notes-and-retrieval.md).
 Use `--diagnostics` to retain rejected drafts locally for investigation; inspect
-them before sharing. Notes and student progress otherwise remain in memory.
+them before sharing. Saved sessions, selected notes excerpts, drafts, and activity live in local SQLite.
 
 ## Managed startup and shutdown
 
@@ -188,3 +189,11 @@ Use `python am.py on --diagnostics` and keep its terminal open. Ctrl+C or
 container cleanup, and unloads the selected models. Docker and Ollama remain
 available for Open WebUI. Container creation is acknowledged before attachment
 so a canceled startup cannot silently create an untracked container afterward.
+
+## Structured inputs
+
+The signature contract now also accepts `linked_list`, `tree`, and `graph` as
+input types, supplied by trusted adapters in all four runtimes. See the
+[structured-input guide](structured-inputs.md) for tagged JSON, node fields,
+heap-indexed trees, size limits, and native return restrictions. The ordinary
+array/scalar interfaces above are unchanged.

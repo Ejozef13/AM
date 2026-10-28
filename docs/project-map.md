@@ -43,6 +43,11 @@ AM/
 ├── ai_exercises.py             AI author, blind review, repair, execution checks
 ├── language_contracts.py       Supported native types and function signatures
 ├── study_input.py              Student topic, notes, difficulty, language validation
+├── progress_store.py           SQLite, activity, goals, and review schedule
+├── learning_paths.py           Curriculum topic lists (no questions)
+├── note_retrieval.py           Bounded PDF extraction and passage retrieval
+├── structures.py               Tagged encodings and Python node adapters
+├── native_structures.py        Native node types/builders/serializers
 ├── generation_diagnostics.py   Optional local rejected-generation reports
 ├── code_runner.py              Container lifecycle and host-side result grading
 ├── compiled_runner.py          Java/C/C++ runner configuration
@@ -52,7 +57,9 @@ AM/
 ├── web/
 │   ├── index.html              Page structure and static text
 │   ├── app.css                 Theme, components, responsive layout
-│   └── app.js                  Browser state, API calls, hints, results, summary
+│   ├── app.js                  Browser state, API calls, drafts, results, summary
+│   ├── editor.js               Highlighting, line numbers, indentation
+│   └── study.js                Dashboard, resume, goals, paths, export/delete
 ├── tools/
 │   ├── setup_compiled_runtime.py  One-time Java/C/C++ compiler setup
 │   └── check_runner_runtime.py    Python runtime probe and image pinning
@@ -95,11 +102,12 @@ The reviewer receives the task and notes, not the author's reference or tests.
 
 ## Runtime data outside Git
 
+- `.am-data/`: SQLite saved sessions, drafts, activity, review schedules, goals.
 - `.am-runtime/`: compiler pin, website ownership record, and lock.
 - `.am-diagnostics/`: rejected generation reports when diagnostics are enabled.
 - `.am-archive/`: existing local backups from the earlier cleanup.
 - `infrastructure/.env.openwebui`: private service configuration.
 
 These are machine-specific or private. This cleanup leaves them alone. Models
-live in Ollama storage; Open WebUI chats live in its Docker volume. The practice
-app currently keeps notes, attempts, and editor drafts in memory.
+live in Ollama storage; Open WebUI chats live in its Docker volume. The practice app saves generated sessions, selected note excerpts, attempts, and
+editor drafts in SQLite. Original PDFs are temporary and are not retained.

@@ -8,3 +8,6 @@ venv/
 .am-diagnostics/
 .am-runtime/
 .am-archive/
+
+.am-data/
+benchmark-results/

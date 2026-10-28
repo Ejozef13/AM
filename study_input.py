@@ -16,8 +16,8 @@ def study_input(data, allowed_languages=('python',)):
     topic, notes = data.get("topic", ""), data.get("notes", "")
     if not isinstance(topic, str) or len(topic) > 160:
         raise ValueError("Keep the topic below 160 characters.")
-    if not isinstance(notes, str) or len(notes) > 12000:
-        raise ValueError("Keep notes below 12,000 characters.")
+    if not isinstance(notes, str) or len(notes) > 200000:
+        raise ValueError("Keep notes below 200,000 characters.")
     if not topic.strip() and not notes.strip():
         raise ValueError("Add a topic or some notes to guide your session.")
     count, difficulty = data.get("count", 3), data.get("difficulty", "standard")

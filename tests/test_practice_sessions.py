@@ -56,7 +56,7 @@ class SessionTests(unittest.TestCase):
 
     def test_input_limits_and_runtime_availability(self):
         for changes in ({'language': 'java'}, {'topic': '', 'notes': ''}, {'count': True},
-                        {'count': 6}, {'difficulty': 'unknown'}, {'notes': 'x'*12001}):
+                        {'count': 6}, {'difficulty': 'unknown'}, {'notes': 'x'*200001}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 study_input(self.data | changes, ('python', 'c'))
         self.assertEqual(study_input(self.data | {'language': 'c'}, ('python','c'))[0], 'Student topic')

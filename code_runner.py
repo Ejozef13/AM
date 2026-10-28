@@ -6,6 +6,7 @@ import selectors
 import subprocess
 import time
 import uuid
+from pathlib import Path
 
 
 class RunnerError(Exception):
@@ -18,7 +19,9 @@ class DockerAuthorizationError(RunnerError):
 
 # This program executes INSIDE the container.
 # Student source is never executed in the host process.
-DRIVER = r"""
+STRUCTURE_RUNTIME = (Path(__file__).resolve().parent / "structures.py").read_text()
+
+DRIVER = STRUCTURE_RUNTIME + "\n" + r"""
 import contextlib
 import io
 import json
@@ -47,7 +50,7 @@ output = BoundedOutput()
 
 try:
     with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-        namespace = {"__name__": "submission"}
+        namespace = {"__name__": "submission", "ListNode":ListNode, "TreeNode":TreeNode, "Graph":Graph}
 
         exec(
             compile(data["source"], "submission.py", "exec"),
@@ -58,7 +61,7 @@ try:
         if not callable(function):
             raise ValueError("Required function is missing.")
 
-        args = data["args"]
+        args = decode(data["args"])
         value = function(*args)
 
         if output.exceeded:
@@ -66,8 +69,8 @@ try:
 
         record = {
             "status": "ok",
-            "value": value,
-            "args_after": args,
+            "value": encode(value),
+            "args_after": encode(args, data["args"]),
         }
 
         # The result must be representable by our JSON protocol.
