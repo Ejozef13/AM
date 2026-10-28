@@ -40,6 +40,7 @@ and run `python tools/setup_compiled_runtime.py --use-existing-image`.
 | Java | `public class Solution`, public static `solve`, no package or `main` |
 | C/C++ | Free `solve` function without `main`; standard includes allowed |
 | Base native values | int32, int64, finite double, boolean, bounded ASCII string, int array |
+| String characters | Java/C++ ASCII 0–127, C ASCII 1–127; up to 1000 characters |
 | Structured inputs | Bounded linked list, heap-indexed tree, adjacency graph; [details](structured-inputs.md) |
 | C arrays | One logical JSON input expands to pointer and length supplied by runner |
 | Returns | Native scalar types; Java/C++ can also return integer arrays; native node outputs are not supported |
@@ -48,6 +49,10 @@ and run `python tools/setup_compiled_runtime.py --use-existing-image`.
 | Student native execution | 3-second wall limit, 2-second CPU limit |
 | Outer native execution | 60 seconds after container creation; creation has a separate allowance of at least 60 seconds |
 | Container | 512 MB memory, 64 processes, 64 MB temporary workspace for compilation |
+
+Generated test strings use explicit character-code envelopes, decoded to actual
+strings before grading. C++ string inputs include their length to preserve NUL;
+Java uses safe octal literals. See [verification](verification.md).
 
 The host builds wrappers from validated types and input values. Author, reviewer,
 and student code all execute inside restricted containers. Expected results stay

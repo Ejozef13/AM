@@ -55,6 +55,7 @@ AM/
 ├── compiled_driver.py          Compile/run supervision inside the container
 ├── native_harness.py           Language-specific wrappers around solve(...)
 ├── lesson_validation.py        Structural checks and strict JSON comparisons
+├── text_protocol.py            Explicit codepoint-to-string test-data decoding
 ├── web/
 │   ├── index.html              Page structure and static text
 │   ├── app.css                 Theme, components, responsive layout

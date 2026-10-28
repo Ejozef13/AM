@@ -27,6 +27,23 @@ Each new author/reviewer request asks for 3–5 small cases. Combined cases incl
 both sets. Identical previously passed source/input/expected combinations can
 be reused within preparation; a changed expectation must be checked again.
 
+## Test strings and escapes
+
+New generated string tests use an explicit `{"__am_text__":[codepoints]}` wire
+format. For example, `[]` inside that object is empty text, `[10]` is a newline,
+`[34,34]` is two quote characters, and `[92,110]` is literal backslash+n. These
+objects are validated and converted to ordinary strings before code execution.
+Only explicit envelopes are decoded; legacy raw strings are never unescaped or
+stripped based on their test names. The compiled reviewer schema enforces this
+format for string inputs and returns. Source and hint fields remain normal JSON
+strings. `text_protocol.py` owns the representation; the runner receives strings.
+
+Native text supports ASCII codes 0–127 in Java/C++ (including NUL), and 1–127 in
+C because its current interface is null-terminated. Java literals use bounded
+octal escapes; C++ strings carry an explicit length so embedded NUL survives.
+Output/printing topics are currently return-text exercises. Captured stdout is
+shown for debugging and is not compared as the graded answer.
+
 ## Bounded repairs
 
 - At most two author drafts per exercise.

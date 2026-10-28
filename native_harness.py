@@ -53,7 +53,7 @@ def c_literal(value):
 
 def scalar_literal(language, kind, value):
     if kind == 'string':
-        return json.dumps(value, ensure_ascii=True) if language == 'java' else c_literal(value)
+        return f'std::string({c_literal(value)}, {len(value)})' if language == 'cpp' else c_literal(value)
     if kind == 'bool':
         return 'true' if value else 'false'
     if kind == 'long':
@@ -86,7 +86,7 @@ def build_harness(language, signature, args):
     signature = validate_signature(language, signature)
     if len(args) != len(signature['parameters']):
         raise ValueError('Argument count differs from typed signature.')
-    args = [typed_value(value, kind) for value, kind in zip(args, signature['parameters'])]
+    args = [typed_value(value, kind, language) for value, kind in zip(args, signature['parameters'])]
     declarations, calls = [], []
     for index, (kind, value) in enumerate(zip(signature['parameters'], args)):
         name = f'am_arg{index}'

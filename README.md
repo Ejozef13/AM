@@ -96,7 +96,8 @@ The local model drafts a question, buggy starter, reference, hints, and tests.
 A separate blind review derives another solution and test set. Both references
 must pass the combined cases, and the starter must show a wrong answer without
 crashing on the checked inputs. Student grading uses execution and comparisons;
-AI does not decide whether a submission passed.
+AI does not decide whether a submission passed. Output/printing topics use
+functions returning the text to display; stdout is debugging evidence.
 
 New requests ask for 3–5 small cases per call and use typed native contracts.
 Failed drafts receive bounded repairs. Model agreement and passing tests are

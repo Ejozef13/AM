@@ -4,10 +4,11 @@
 
 | Check | Result | Elapsed |
 | --- | --- | --- |
-| Default regression discovery | 130 passed, 23 optional checks skipped | 24.825 s |
+| Default regression discovery | 134 passed, 24 optional checks skipped | 23.698 s |
 | Real Python runner suite | 17 passed | 52.363 s |
 | Real Java/C/C++ runner suite | 10 passed | 489.727 s |
 | New structure matrix + encoding checks | 3 test methods passed; 12 real calls across four languages | 138.629 s |
+| Printable-ASCII protocol regression + real transport | 4 methods passed; 5 real Java/C++/C calls | 96.804 s |
 | Real HTTP/browser workflow | Passed | See repeatable smoke test below |
 
 The structure matrix covers nonempty lists, sparse trees, cyclic adjacency
@@ -79,3 +80,22 @@ includes successful and failed attempted runs and Docker/model overhead; the
 first request may include model loading. An unavailable preflight records no
 attempts. Reports are local and ignored by Git until deliberately reviewed and
 published. Ctrl+C saves partial measurements with `status: interrupted`.
+
+## Printable-ASCII regression
+
+The uploaded Java failure contained literal quote characters in its "empty"
+input, and literal backslash sequences where control characters were intended.
+The new `text_protocol.py` format requests explicit codepoint envelopes for test
+strings. Only those explicit objects are decoded; raw legacy strings are literal.
+Native reviewer schemas enforce the new representation.
+
+```bash
+sudo -v
+env AM_ASCII_TESTS=1 python -m unittest discover -s tests -p test_ascii_protocol.py -v
+```
+
+The real matrix round-trips every supported ASCII byte through Java/C++/C and
+checks the uploaded reference/starter behavior on the full Java ASCII range.
+The uploaded raw diagnostic is not committed or used as a question bank. These
+checks validate transport and the regression; a new desktop model generation is
+still needed to measure how often it produces acceptable fresh exercises.

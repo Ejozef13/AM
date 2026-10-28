@@ -3,6 +3,7 @@ import json
 import math
 import re
 from structures import STRUCTURE_TYPES, STRUCTURE_GUIDE, validate_structure
+from text_protocol import text_schema
 
 LABELS = {'python': 'Python', 'java': 'Java', 'c': 'C', 'cpp': 'C++'}
 BASIC_TYPES = ('int', 'long', 'double', 'bool', 'string', 'int_array')
@@ -34,7 +35,7 @@ def validate_signature(language, signature):
     return {'parameters': list(parameters), 'returns': returns}
 
 
-def typed_value(value, kind):
+def typed_value(value, kind, language=None):
     if kind in STRUCTURE_TYPES:
         return validate_structure(value, kind)
     if kind in ('int', 'long'):
@@ -50,9 +51,11 @@ def typed_value(value, kind):
         if type(value) is not bool:
             raise ValueError('bool requires a JSON boolean.')
     elif kind == 'string':
+        lower = 1 if language=='c' else 0
         if not isinstance(value, str) or len(value) > 1000 or any(
-                not (' ' <= char <= '~' or char in '\n\r\t') for char in value):
-            raise ValueError('Compiled string inputs/expected outputs use ASCII text (up to 1000 characters; newline/tab allowed).')
+                not lower <= ord(char) <= 127 for char in value):
+            raise ValueError('Compiled strings use ASCII codes '+str(lower)+'..127 (up to 1000 characters). '
+                             + ('C strings cannot contain NUL; use an integer array for binary data.' if language=='c' else ''))
     elif kind == 'int_array':
         if not isinstance(value, list) or len(value) > 100:
             raise ValueError('int_array requires an array of at most 100 integers.')
@@ -63,14 +66,14 @@ def typed_value(value, kind):
     return value
 
 
-def typed_cases(signature, tests):
+def typed_cases(signature, tests, language=None):
     output = []
     for case in tests:
         if len(case['args']) != len(signature['parameters']):
             raise ValueError(f"{case['name']}: test argument count differs from the signature.")
         output.append({**case,
-            'args': [typed_value(value, kind) for value, kind in zip(case['args'], signature['parameters'])],
-            'expected': typed_value(case['expected'], signature['returns'])})
+            'args': [typed_value(value, kind, language) for value, kind in zip(case['args'], signature['parameters'])],
+            'expected': typed_value(case['expected'], signature['returns'], language)})
     return output
 
 
@@ -102,7 +105,7 @@ def function_header(language, signature):
     return prefix + native_type(language, signature['returns']) + ' solve(' + ', '.join(params) + ')'
 
 
-def value_schema(kind):
+def value_schema(kind, language=None):
     if kind in STRUCTURE_TYPES:
         key = 'adjacency' if kind == 'graph' else 'values'
         items = ({'type':'array','maxItems':24,'items':{'type':'integer','minimum':0,'maximum':23}}
@@ -116,11 +119,11 @@ def value_schema(kind):
     if kind == 'int_array':
         return {'type':'array', 'maxItems':100, 'items':value_schema('int')}
     if kind == 'string':
-        return {'type':'string', 'maxLength':1000}
+        return text_schema(language)
     return {'type': {'double':'number', 'bool':'boolean'}[kind]}
 
 
-def review_test_schema(signature):
+def review_test_schema(signature, language=None):
     """Constrain model tests to logical arguments, not the expanded C ABI."""
     parameters = signature['parameters']
     # Ollama's grammar converter requires object schemas for items. Do not add
@@ -129,8 +132,8 @@ def review_test_schema(signature):
         'type':'object', 'additionalProperties':False, 'required':['name','args','expected'],
         'properties':{'name':{'type':'string','minLength':1,'maxLength':100},
             'args':{'type':'array','minItems':len(parameters),'maxItems':len(parameters),
-                    'prefixItems':[value_schema(kind) for kind in parameters]},
-            'expected':value_schema(signature['returns'])}}}
+                    'prefixItems':[value_schema(kind, language) for kind in parameters]},
+            'expected':value_schema(signature['returns'], language)}}}
 
 
 def language_instruction(language):
@@ -146,7 +149,8 @@ def language_instruction(language):
     return (f'Generate {LABELS[language]} code. ' + shape +
         'Select signature.parameters and signature.returns before writing code. '
         'The application requires this type mapping: int=signed 32-bit integer, long=signed 64-bit integer, double=finite number, '
-        'bool=boolean, string=ASCII text up to 1000 chars (newline/tab allowed), int_array=0..100 32-bit integers. '
+        'bool=boolean, string=ASCII text up to 1000 chars, int_array=0..100 32-bit integers. ' +
+        ('C strings accept codes 1..127 only: NUL is unsupported. ' if language=='c' else 'Strings accept all ASCII codes 0..127, including control characters. ') +
         'Test args contains one JSON value for each declared parameter; nested arrays are one argument. '
         'Use arg0, arg1, ... for argument names in your code. entrypoint is always solve. '
         'Return values, never print results or parse stdin; the trusted harness handles I/O. '

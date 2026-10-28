@@ -34,11 +34,14 @@ class ContractTests(unittest.TestCase):
 
     def test_value_types_ranges_and_text_encoding_are_explicit(self):
         for value, kind in [(True, 'int'), (1, 'bool'), (2**31, 'int'), (2**63, 'long'),
-                            (float('nan'), 'double'), ('\x00', 'string'), ('😊', 'string'),
+                            (float('nan'), 'double'), ('😊', 'string'),
                             ([True], 'int_array'), ([0]*101, 'int_array')]:
             with self.subTest(value=value, kind=kind), self.assertRaises(ValueError):
                 typed_value(value, kind)
         self.assertEqual(typed_value('\n\t"\\', 'string'), '\n\t"\\')
+        self.assertEqual(typed_value("\0\x1f\x7f", "string", "java"), "\0\x1f\x7f")
+        with self.assertRaises(ValueError):
+            typed_value("\0", "string", "c")
         self.assertEqual(typed_value(-(2**31), 'int'), -(2**31))
         self.assertEqual(typed_value(2**63-1, 'long'), 2**63-1)
         self.assertEqual(typed_value(-(2**63), 'long'), -(2**63))
