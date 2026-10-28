@@ -55,7 +55,8 @@ def main():
             try:
                 lessons,_,_=generator.build(args.topic,context,'standard',1)
                 item.update(success=True,combined_cases=len(lessons[0]['tests']),
-                            reference_runs=lessons[0]['quality']['reference_runs'], verified_expectations=lessons[0]['quality']['review_test_repairs'])
+                            reference_runs=lessons[0]['quality']['reference_runs'], verified_expectations=lessons[0]['quality']['review_test_repairs'],
+                            starter_repairs=lessons[0]['quality'].get('starter_repairs',0))
                 seen.add(task_fingerprint(lessons[0])); recent.append(lessons[0]['title'])
             except (AMError,OSError,ValueError,RunnerError,subprocess.SubprocessError) as error:
                 item.update(success=False,error_type=type(error).__name__,error=str(error)[:500])

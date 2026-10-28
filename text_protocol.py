@@ -9,6 +9,8 @@ TEXT_FORMAT = (
     '{"__am_text__":[34,34]}; the two literal characters backslash+n are '
     '{"__am_text__":[92,110]}. Do not wrap these objects or their contents in quotes. '
     'These objects become ordinary strings before the function is called. '
+    'Use this envelope ONLY for text: integers, booleans, numbers, and integer arrays '
+    'must remain native JSON values, never codepoint objects. '
     'Metadata, hints, and source code fields remain normal JSON strings. '
 )
 

@@ -4,12 +4,13 @@
 
 | Check | Result | Elapsed |
 | --- | --- | --- |
-| Default regression discovery | 148 passed, 25 optional checks skipped | 24.064 s |
+| Default regression discovery | 153 passed, 26 optional checks skipped | 22.962 s |
 | Real Python runner suite | 17 passed | 52.363 s |
 | Real Java/C/C++ runner suite | 10 passed | 489.727 s |
 | New structure matrix + encoding checks | 3 test methods passed; 12 real calls across four languages | 138.629 s |
 | Printable-ASCII protocol regression + real transport | 4 methods passed; 5 real Java/C++/C calls | 96.804 s |
 | Author expectation typo regression | 3 methods passed; 5 real Java container calls | 95.676 s |
+| Focused test/starter repair regression | 6 methods passed; 8 real Java container calls | 52.472 s |
 | Real HTTP/browser workflow | Passed | See repeatable smoke test below |
 
 The structure matrix covers nonempty lists, sparse trees, cyclic adjacency
@@ -32,6 +33,17 @@ replacement answers in this verification step. The raw uploaded diagnostic is
 not committed. Real public search was unavailable in this environment; retrieval
 and its failure disclosure have controlled unit/browser coverage. Desktop search
 availability and live GPT-OSS quality still need desktop measurements.
+
+The focused repair regression covers wrongly encoded integer arrays followed by
+a crashing starter, independent test/starter budgets, immutable task/reference
+fields, rejected repair reviews, infrastructure interruption, and a fully correct
+starter that must not be published. The real Java case reproduces the empty-array
+crash and executes the repaired starter against every retained case. AI repair
+and approval responses are controlled fixtures, not a live GPT-OSS quality test.
+
+```bash
+env AM_STARTER_TESTS=1 python -m unittest discover -s tests -p test_focused_generation_repairs.py -v
+```
 
 Credential lifecycle checks use real controlled subprocesses rather than real
 sudo/passwords. They verify refresh beyond a simulated expiry, terminal renewal,

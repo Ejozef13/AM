@@ -103,7 +103,10 @@ functions returning the text to display; stdout is debugging evidence.
 
 New requests ask for 3–5 small cases per call and use typed native contracts.
 Failed drafts receive bounded repairs. Model agreement and passing tests are
-useful evidence, not proof of correctness. Optional web documentation retrieval supplements local note passages. Search
+useful evidence, not proof of correctness. Malformed native tests get a focused
+typed-data repair; a crashing or fully correct starter gets its own bounded
+repair/review steps while keeping checked reference solutions and tests intact.
+Optional web documentation retrieval supplements local note passages. Search
 uses only the language/topic and discloses unavailable sources.
 Bounded linked-list, tree, and graph inputs are supported across all four
 languages; see the structured-input guide for calling conventions and limits.

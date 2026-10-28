@@ -47,6 +47,10 @@ shown for debugging and is not compared as the graded answer.
 ## Bounded repairs
 
 - At most two author drafts per exercise.
+- For a valid native signature with malformed tests, one focused typed-test
+  repair per author draft can replace only test data. Source/task/signature fields
+  remain unchanged. The corrected cases still require blind review and both
+  reference executions; malformed data is never coerced into guessed answers.
 - At most two reviewer attempts for an otherwise unchanged draft.
 - Both independent solutions run before an author-written expected value can
   terminate preparation. A typo in either author's or reviewer's expectation can
@@ -63,8 +67,14 @@ shown for debugging and is not compared as the graded answer.
   failed rechecking cannot publish an exercise.
 - Rejected author expectations return to bounded author repair; rejected
   reviewer-only expectations stop the preparation rather than changing the task.
-- Starter repair receives the failing input and runtime evidence, while keeping
-  the task and valid domain. It still must expose a wrong answer safely.
+- A starter failure has up to two focused repairs per author draft, independently
+  of the task/test-format budget. The AI may change only starter code, hints, and
+  relevance text. The task, signature, all combined test inputs/expectations, and
+  both checked reference programs stay unchanged. An independent review checks
+  the changed starter/hints without seeing references or answer keys, then every
+  combined case runs against the starter again. Unchanged references need not be
+  regenerated or rerun. Crashes, a fully correct starter, or rejected reviews
+  cannot publish a question.
 - Infrastructure failures abort preparation; they do not become student failures.
 - A failed later exercise never publishes a partially prepared session.
 

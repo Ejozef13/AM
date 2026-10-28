@@ -312,9 +312,16 @@ class GeneratedTests(unittest.TestCase):
 
     def test_no_bug_is_not_published(self):
         raw = draft() | {"starter_code": REFERENCE}
-        with patch("ai_exercises.api", side_effect=[response(raw), response(review())] * 2):
+        def unchanged(model, system, data, schema):
+            if 'starter_code' in schema['properties'] and 'tests' not in schema['properties']:
+                return {'starter_code': REFERENCE, 'hints': ['Trace every input.'], 'reason': 'Practice factorial.'}
+            if 'reference_solution' in schema['properties']:
+                return raw if 'title' in schema['properties'] else review()
+            return {'approved':True,'feedback':'Fixture review approval.'}
+        with patch.object(self.generator,'ask',side_effect=unchanged) as ask:
             with self.assertRaisesRegex(AMError, "no intended bug"):
                 self.build()
+        self.assertEqual(ask.call_count,12)  # Two drafts, each with two bounded starter repairs.
 
     def test_malformed_evidence_and_json_are_rejected_before_execution(self):
         for change in ({"notes_quote": "invented quote"}, {"starter_code": "bad syntax !"},
