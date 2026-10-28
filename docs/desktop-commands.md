@@ -11,11 +11,6 @@ git pull --ff-only
 ```
 
 Compiler setup already passed on your desktop; this update needs no rebuild.
-Optional cleanup of the recognized, unused study prototype (keeps a local backup):
-
-```bash
-python tools/archive_legacy.py --apply
-```
 
 ## AM practice website
 

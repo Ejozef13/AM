@@ -37,6 +37,10 @@ function sessionFields() { return {session_id: session.session_id, lesson_index:
 function screen(name) {
   $("setup").hidden = name !== "setup"; $("workspace").hidden = name !== "exercise";
   $("session-bar").hidden = name !== "exercise"; $("session-summary").hidden = name !== "summary";
+  document.querySelectorAll("[data-step]").forEach((step) => {
+    if (step.dataset.step === name) step.setAttribute("aria-current", "step");
+    else step.removeAttribute("aria-current");
+  });
 }
 async function perform(message, operation) {
   if (busy) return;
@@ -170,8 +174,8 @@ $("finish-session").addEventListener("click", () => {
 });
 $("another-session").addEventListener("click", () => {
   screen("setup"); showError(); $("intro-eyebrow").textContent = "MAKE THE NEXT FEW MINUTES COUNT";
-  $("intro-title").textContent = "What are we studying today?";
-  $("intro-description").textContent = "Bring a topic or a few notes. Turn them into a short, focused coding session.";
+  $("intro-title").textContent = "A little code. A little progress.";
+  $("intro-description").textContent = "Pick a language. Bring your notes. Build your debugging skills, one short challenge at a time.";
 });
 $("notes-file").addEventListener("change", async () => {
   const file = $("notes-file").files[0]; if (!file) return;

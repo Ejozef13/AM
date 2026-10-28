@@ -7,19 +7,29 @@
 </head>
 <body>
   <main>
-    <header><a class="brand" href="/">AM<span>practice</span></a><span class="badge">A LITTLE PRACTICE. REAL PROGRESS.</span></header>
-    <div class="intro"><p class="eyebrow" id="intro-eyebrow">MAKE THE NEXT FEW MINUTES COUNT</p><h1 id="intro-title">What are we<br>studying today?</h1><p id="intro-description">Bring a topic or a few notes. Turn them into a short, focused coding session.</p></div>
+    <header>
+      <a class="brand" href="/" aria-label="AM practice home"><span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>AM<span class="brand-label">practice</span></a>
+      <span class="badge">LOCAL AI · YOUR NOTES · YOUR PACE</span>
+    </header>
+    <nav class="practice-path" aria-label="Practice session steps">
+      <ol>
+        <li data-step="setup" aria-current="step"><span class="step-number" aria-hidden="true">1</span>Pick your focus</li>
+        <li data-step="exercise"><span class="step-number" aria-hidden="true">2</span>Find the fix</li>
+        <li data-step="summary"><span class="step-number" aria-hidden="true">3</span>Review your session</li>
+      </ol>
+    </nav>
+    <div class="intro"><p class="eyebrow" id="intro-eyebrow">MAKE THE NEXT FEW MINUTES COUNT</p><h1 id="intro-title">A little code.<br>A little progress.</h1><p id="intro-description">Pick a language. Bring your notes. Build your debugging skills, one short challenge at a time.</p></div>
     <p id="error" role="alert" hidden></p>
     <p id="loading" role="status" aria-live="polite">Loading practice options…</p>
     <section id="setup" class="card setup-card" hidden aria-labelledby="setup-title">
-      <h2 id="setup-title">Pick your focus</h2>
+      <div class="card-heading"><span class="eyebrow">YOUR NEXT CHALLENGE</span><h2 id="setup-title">What are we studying today?</h2><p class="muted">Start small. One exercise is a good place to begin.</p></div>
       <p class="field-label" id="language-label">Language</p><div id="languages" class="languages" role="group" aria-labelledby="language-label"></div><p id="runtime-setup" class="muted" hidden></p>
       <form id="setup-form">
         <label for="topic">What would you like to practice?</label><input id="topic" maxlength="160" placeholder="e.g. loops, recursion, strings, or searching">
         <label for="notes">Your notes <span class="muted">optional · up to 12,000 characters</span></label>
         <textarea id="notes" rows="6" maxlength="12000" placeholder="Paste the definitions, examples, or course excerpt you want to focus on."></textarea>
         <div class="upload-row"><label class="file-label" for="notes-file">Add a notes file</label><input id="notes-file" type="file" accept=".txt,.md,.markdown,.py,.java,.c,.cpp,.h,.hpp"><span id="file-status" class="muted"></span></div>
-        <p class="muted">Text, Markdown, or code files only for now. Uploaded code is context, not executed. PDF and slides are planned.</p>
+        <p class="muted">Text, Markdown, or code files only for now. Uploaded code is context, not executed. PDFs and slides are not supported yet.</p>
         <div class="setup-options"><div><label for="difficulty">Difficulty</label><select id="difficulty"><option value="introductory">Introductory</option><option value="standard" selected>Standard</option><option value="challenging">Challenging</option></select></div><div><label for="count">Session length</label><select id="count"><option value="1" selected>1 exercise</option><option value="2">2 exercises</option><option value="3">3 exercises</option><option value="4">4 exercises</option><option value="5">5 exercises</option></select></div></div>
         <div class="scope-note"><p class="eyebrow" id="mode-title">YOUR PRACTICE SESSION</p><p id="family-list"></p><p class="muted" id="mode-description"></p></div>
         <p id="planner-label" class="muted"></p>

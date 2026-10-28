@@ -1,123 +1,108 @@
-# AM coding practice
+# AM · Coding practice
 
-Local, notes-guided debugging practice for Python, Java, C, and C++. Choose a
-language, add a topic and optional notes, fix a short program, reveal hints, and
-run its tests. Grading uses restricted execution and host-side comparisons.
+Turn your notes into short debugging sessions. Choose **Python, Java, C, or C++**,
+fix a generated program, reveal hints, run tests, and review your session.
+AM runs locally with Ollama and grades code using restricted Docker execution.
 
-## Start and stop
+## Quick start
+
+From the repository, with the existing model and runner images installed:
 
 ```bash
 python am.py on --diagnostics
 ```
 
-Open **http://127.0.0.1:8090** and keep the launch terminal open. This checks
-Docker, starts the existing Ollama service if necessary, reports the configured
-model's family/size, loads it, and starts the website. Models are not downloaded
-and compiler images are not rebuilt. Start with one exercise per session.
-
-Press **Ctrl+C** in the launch terminal to switch off, or use another terminal:
+Open **http://127.0.0.1:8090**. Keep the terminal open. Start with one exercise.
+Press **Ctrl+C** to stop, or use another terminal:
 
 ```bash
 python am.py off
 python am.py status
 ```
 
-Shutdown cancels active model requests and container work, waits for cleanup,
-and unloads only the models selected for the practice website. Shared Docker
-and Ollama services remain available for Open WebUI. Sessions and editor drafts
-are in memory; finish or save your work before switching off.
+Stopping cancels active work, cleans up containers, and unloads the selected
+models. Shared Ollama and Docker services remain available. Practice sessions
+and editor drafts currently live in memory; save your work before stopping.
+Stop any older `practice_web.py` launch before switching to the managed commands.
 
-Stop an older `practice_web.py` with Ctrl+C once before using these commands.
-An unrelated process on the requested port is never killed. Ownership records
-live in Git-ignored `.am-runtime/`.
+## Setup
 
-With sudo-based Docker, the launch terminal may ask for authorization. After an
-idle credential expiry, keep the browser open, press Ctrl+Z in the launch terminal,
-run `sudo -v`, then `fg` and retry. Existing direct Docker access is detected
-automatically. Group memberships and sudo policies are unchanged.
+Requirements: **Linux, Python 3.10+, Ollama, and Docker**. Application code uses
+Python's standard library. The default model is `am-study:latest`, configured
+from `gpt-oss:20b` with a 32,768-token context in
+[`infrastructure/Modelfile`](infrastructure/Modelfile). Startup reports installed
+model metadata. No models are downloaded automatically.
 
-## Your AI model
-
-The website defaults to **`am-study:latest`**. The repository's
-[Modelfile](infrastructure/Modelfile) derives it from **`gpt-oss:20b`** with a
-32,768-token context. Startup reports metadata from the actual installed tag;
-a name alone cannot establish which weights are installed on a machine.
-
-An exercise normally uses two sequential calls to that local model: an author
-and a blind reviewer. The reviewer sees the task and notes but not the author's
-reference or tests. Both solutions must pass the combined cases; the starter
-must demonstrate a failing result. Project files are not automatically read
-into model context. There is no web search or RAG in this workflow.
-
-Small structured tasks use low reasoning and request 3–5 small tests per call.
-Compiled-language review schemas enforce declared types and the logical input
-count. C array lengths are supplied by the runner, not extra JSON arguments.
-Validation and bounded repair remain in place. Passing tests and model agreement
-do not establish universal correctness.
-
-Select other already-installed models with:
-
-```bash
-python am.py on --model am-study:latest --review-model YOUR_LOCAL_MODEL
-```
-
-If the alias is missing, with `gpt-oss:20b` already installed:
+With `gpt-oss:20b` already installed, create the alias if missing:
 
 ```bash
 ollama create am-study -f infrastructure/Modelfile
 ```
 
-## One-time language setup
-
-Requirements: Python 3.10+, local Ollama and its installed model, and Docker on
-Linux. Application code uses only Python's standard library. Preserve the
-existing loopback-only Ollama/Open WebUI installation.
-
-Python uses the pinned image in `infrastructure/python-runner-image.txt`.
-To enable Java 21, C17, and C++17:
+For first-time runner setup:
 
 ```bash
 sudo systemctl start docker
 sudo -v
+python tools/check_runner_runtime.py --pin
 python tools/setup_compiled_runtime.py
 ```
 
-Wait for three compiler probes and `Compiler runtime ready`. Normal setup works
-with legacy Docker builds and BuildKit. See [language setup and limits](docs/multilanguage-practice.md).
+The Python image listed in `infrastructure/python-runner-image.txt` must be
+available locally. See [runtime setup](docs/multilanguage-practice.md) for compiler
+options and limits. Existing installations do not need a rebuild for frontend edits.
 
-## Project layout
+## Customize the app
 
-| Area | Responsibility |
+| Change | Edit |
 | --- | --- |
-| `am.py`, `site_control.py` | Website/model lifecycle and ownership |
-| `practice_web.py`, `web/` | Local API and student interface |
-| `ai_exercises.py`, `language_contracts.py` | Drafting, review, and typed contracts |
-| `code_runner.py`, `compiled_runner.py`, `compiled_driver.py`, `native_harness.py` | Restricted execution and grading |
-| `practice_sessions.py` | In-memory sessions and summaries |
-| `exercise_families.py`, `practice_planner.py` | Explicit Python template modes |
-| `tools/`, `examples/`, `tests/` | Setup, benchmarks, examples, and verification |
-| `docs/history/` | Earlier milestones and terminal-client documentation |
+| Colors, fonts, spacing, mobile layout | [`web/app.css`](web/app.css) |
+| Page headings, labels, buttons, structure | [`web/index.html`](web/index.html) |
+| Dynamic session text, hints UI, results | [`web/app.js`](web/app.js) |
+| AI instructions, review, repair | [`ai_exercises.py`](ai_exercises.py) |
+| Supported function types | [`language_contracts.py`](language_contracts.py) |
 
-Archive the recognized old untracked `study_app.py`/`study/` prototype reversibly:
+Frontend changes need a browser refresh. Backend changes need an app restart.
+The [project map](docs/project-map.md) explains every module and the request flow.
 
-```bash
-python tools/archive_legacy.py          # Preview
-python tools/archive_legacy.py --apply # Archive locally; never delete
-```
+## How it works
 
-Model-only commands remain explicit: `am.py model-on`, `model-status`, and
-`model-off --model NAME`. `am.py chat` is the separate terminal client.
-`practice_web.py` remains a direct website entry point. `--offline` and
-`--templates` are Python-only options, never automatic fallbacks.
+The local model drafts a question, buggy starter, reference, hints, and tests.
+A separate blind review derives another solution and test set. Both references
+must pass the combined cases, and the starter must show a wrong answer without
+crashing on the checked inputs. Student grading uses execution and comparisons;
+AI does not decide whether a submission passed.
 
-## Verification
+New requests ask for 3–5 small cases per call and use typed native contracts.
+Failed drafts receive bounded repairs. Model agreement and passing tests are
+useful evidence, not proof of correctness. No web search or RAG is enabled.
+Custom linked-list node inputs are not supported yet.
+
+`--offline` and `--templates` retain explicit Python template workflows; neither
+is a silent fallback after generation fails. `am.py chat` is optional terminal
+chat. Open WebUI remains independent of the practice website.
+
+## Guides
+
+- [Desktop start/stop commands and independent Open WebUI](docs/desktop-commands.md)
+- [Project map and editing guide](docs/project-map.md)
+- [Product roadmap](docs/roadmap.md)
+- [Generation, review, and accuracy limitations](docs/ai-generated-practice.md)
+- [Python runner](docs/code-runner.md) · [Java/C/C++ setup](docs/multilanguage-practice.md)
+- [Open WebUI configuration](docs/open-webui.md)
+
+## Development checks
 
 ```bash
 python -m unittest discover -s tests -v
+node --check web/app.js
 ```
 
-Default tests use controlled model/service fixtures. Optional real-container
-checks and validation records are in [multilanguage practice](docs/multilanguage-practice.md).
-`--diagnostics` stores rejected drafts locally in `.am-diagnostics/` and logs
-bounded execution errors. Inspect generated content before sharing it. Token
-counts and truncation reasons are recorded without saving hidden reasoning.
+Default tests use controlled model/service fixtures. Optional real Docker checks
+are documented in the runtime guides. Keep tests and validation tools with the
+source: they protect the execution boundary and generation contracts.
+
+Diagnostics save rejected drafts to Git-ignored `.am-diagnostics/`; inspect them
+before sharing. Runtime pins and locks stay in `.am-runtime/`. Existing private
+configuration, model storage, archived local files, and Open WebUI data are not
+removed by repository cleanup.

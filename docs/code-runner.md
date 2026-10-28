@@ -25,13 +25,14 @@ This is a local prototype, not a public hostile-code execution service.
 
 From the project root:
 
+Save your own solution as `solution.py`, then run:
+
 ```bash
 sudo -v
-python run_submission.py exercises/python/largest_value.json examples/largest_value_buggy.py
-python run_submission.py exercises/python/largest_value.json examples/largest_value_fixed.py
+python run_submission.py exercises/python/largest_value.json solution.py
 ```
 
-Expected results: buggy solution 6/8; fixed solution 8/8.
+The bundled lesson is also used by the website's default lesson endpoint and tests.
 
 Exit codes:
 - 0: all reviewed cases passed
