@@ -10,7 +10,7 @@ import sys
 import threading
 
 from code_runner import DockerAuthorizationError, DockerRunner, RunnerError, grade_case
-from am_core import AMError
+from am_core import AMError, PRACTICE_MODEL
 from ai_exercises import OllamaExerciseGenerator
 from generation_diagnostics import DiagnosticRecorder
 from compiled_runner import CompiledRunner
@@ -31,10 +31,16 @@ class PracticeApp:
         self.sessions = SessionStore(planner or OllamaPlanner(), runner, generator)
         self.progress = "Ready"
         self.diagnostics = diagnostics
+        self.stop_event = threading.Event()
+        for runtime in self.runtimes.values():
+            runtime.cancel_event = self.stop_event
         if generator is not None:
             generator.progress = self.set_progress
+            generator.cancel_event = self.stop_event
 
     def set_progress(self, message):
+        if self.stop_event.is_set():
+            raise AMError('Session preparation canceled because the website is stopping.')
         self.progress = message
 
     def execution_diagnostic(self, operation, error):
@@ -238,21 +244,22 @@ def make_server(app, port=8090):
     # Non-daemon request threads allow active runner cleanup to finish at shutdown.
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = False
+    server.practice_app = app
     return server
 
 
-def main():
+def main(argv=None, on_ready=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--docker-direct", action="store_true",
                         help="Only use when already authorized to access Docker directly")
     parser.add_argument("--offline", action="store_true", help="Use explicit keyword matching instead of AM planning")
     parser.add_argument("--templates", action="store_true", help="Use the previous reviewed-template mode")
-    parser.add_argument("--model", default="am-study:latest", help="Local Ollama author model")
+    parser.add_argument("--model", default=PRACTICE_MODEL, help="Local Ollama author model")
     parser.add_argument("--review-model", help="Optional installed Ollama reviewer model; defaults to a separate call to the author model")
     parser.add_argument("--diagnostics", action="store_true",
                         help="Print rejection details and save generated drafts/reviews to .am-diagnostics/last-generation.json")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not 0 <= args.port <= 65535:
         parser.error("Port must be between 0 and 65535.")
     try:
@@ -294,10 +301,15 @@ def main():
         print("Diagnostics enabled: rejected generated code/tests will be saved locally to "
               f"{ROOT / '.am-diagnostics/last-generation.json'}. Inspect before sharing.", flush=True)
     try:
+        if on_ready:
+            on_ready(server.server_address[1], server)
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nStopping. Waiting for active runner cleanup, if any…", flush=True)
     finally:
+        # Cancel model requests and active container loops before joining workers.
+        # Request threads still perform their normal container cleanup.
+        server.practice_app.stop_event.set()
         server.server_close()
 
 

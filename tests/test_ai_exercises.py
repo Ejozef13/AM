@@ -133,7 +133,8 @@ class GeneratedTests(unittest.TestCase):
         self.assertEqual(author_data["note_excerpts"], {"note-1": NOTES})
         self.assertNotIn("notes", author_data)
         reviewer_data = json.loads(api.call_args_list[1].args[1]["messages"][1]["content"])
-        self.assertEqual(reviewer_data["exercise"]["focus_plan"]["notes_quote"], NOTES)
+        self.assertEqual(reviewer_data['notes'], NOTES)
+        self.assertNotIn('focus_plan', reviewer_data['exercise'])
 
     def test_excerpt_ids_preserve_original_unicode_whitespace_and_long_notes(self):
         notes = ("Line one.\nLine two uses ‘quotes’ and  double spaces.\n" * 400)[:12000]

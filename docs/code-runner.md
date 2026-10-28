@@ -27,8 +27,8 @@ From the project root:
 
 ```bash
 sudo -v
-python run_submission.py exercises/python/largest_value.json submissions/largest_value_buggy.py
-python run_submission.py exercises/python/largest_value.json submissions/largest_value_fixed.py
+python run_submission.py exercises/python/largest_value.json examples/largest_value_buggy.py
+python run_submission.py exercises/python/largest_value.json examples/largest_value_fixed.py
 ```
 
 Expected results: buggy solution 6/8; fixed solution 8/8.

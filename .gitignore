@@ -7,3 +7,4 @@ venv/
 !.env.example
 .am-diagnostics/
 .am-runtime/
+.am-archive/

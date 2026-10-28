@@ -5,15 +5,35 @@ from pathlib import Path
 import unittest
 import subprocess
 import tempfile
+import threading
+import sys
 from unittest.mock import Mock, patch
 
-from code_runner import DockerAuthorizationError, DockerRunner, equivalent, grade_case
+from code_runner import DockerAuthorizationError, DockerRunner, RunnerError, equivalent, grade_case
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_DOCKER = os.environ.get("AM_DOCKER_TESTS") == "1"
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_cancel_waits_for_late_container_creation_before_finishing_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            command = Path(directory)/'fake-docker'
+            command.write_text('#!'+sys.executable+'\nimport sys,time\n'
+                               'if sys.argv[1]=="create": print("fake-id")\n'
+                               'else: time.sleep(30)\n')
+            command.chmod(0o700)
+            runner = DockerRunner('python@sha256:'+'a'*64,command=(str(command),),wall_seconds=3)
+            runner.cancel_event = threading.Event()
+            timer = threading.Timer(0.1, runner.cancel_event.set);timer.start()
+            try:
+                with patch.object(runner,'remove',side_effect=[False,False,True]) as remove:
+                    with self.assertRaisesRegex(RunnerError,'canceled'):
+                        runner.run('def f(): return 1','f',[])
+                self.assertEqual(remove.call_count,3)
+                self.assertEqual(len({call.args[0] for call in remove.call_args_list}),1)
+            finally:
+                timer.cancel();timer.join()
     def test_expired_sudo_exit_one_is_infrastructure_failure_not_a_grade(self):
         with tempfile.TemporaryDirectory() as directory:
             sudo = Path(directory) / 'sudo'

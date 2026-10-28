@@ -15,8 +15,7 @@ Keep the existing Ollama and Open WebUI installation. From the repository:
 sudo systemctl start docker
 sudo -v
 python tools/setup_compiled_runtime.py
-python am.py on
-python practice_web.py --diagnostics
+python am.py on --diagnostics
 ```
 
 Open `http://127.0.0.1:8090`. Setup downloads compiler dependencies into a local
@@ -102,7 +101,8 @@ slots, and a 64 MB executable temporary filesystem for native binaries.
 
 Compilation has a 30-second wall limit and 8-second CPU limit. The compiled
 student program has a 3-second wall limit and 2-second CPU limit. The surrounding
-container request has a 60-second wall limit to allow Docker startup overhead;
+container execution request has a 60-second wall limit after creation;
+container creation has a separate startup allowance of at least 60 seconds;
 cleanup removes the uniquely named
 container and retries a bounded daemon-removal failure. C/C++ builds enable
 AddressSanitizer and UndefinedBehaviorSanitizer. Output and compiler diagnostics
@@ -182,3 +182,11 @@ insufficient. Notes still go directly to local Ollama. There is no web search,
 RAG, automatic source verification, or new model installation in this change.
 Use `--diagnostics` to retain rejected drafts locally for investigation; inspect
 them before sharing. Notes and student progress otherwise remain in memory.
+
+## Managed startup and shutdown
+
+Use `python am.py on --diagnostics` and keep its terminal open. Ctrl+C or
+`python am.py off` from another terminal cancels active requests, waits for
+container cleanup, and unloads the selected models. Docker and Ollama remain
+available for Open WebUI. Container creation is acknowledged before attachment
+so a canceled startup cannot silently create an untracked container afterward.

@@ -2,7 +2,7 @@
 
 import json
 
-from am_core import AMError, api
+from am_core import AMError, PRACTICE_MODEL, api
 from exercise_families import CATALOG, LEVELS
 
 LANGUAGES = [
@@ -56,7 +56,7 @@ def validate_plan(plan, notes):
 class OllamaPlanner:
     label = "AM suggested the focus; reviewed Python generators build and check the exercises."
 
-    def __init__(self, model="am-study:latest"):
+    def __init__(self, model=PRACTICE_MODEL):
         self.model = model
 
     def plan(self, topic, notes):

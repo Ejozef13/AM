@@ -91,21 +91,45 @@ def function_header(language, signature):
     return prefix + native_type(language, signature['returns']) + ' solve(' + ', '.join(params) + ')'
 
 
+def value_schema(kind):
+    if kind in ('int', 'long'):
+        bits = 32 if kind == 'int' else 64
+        return {'type':'integer', 'minimum':-(2**(bits-1)), 'maximum':2**(bits-1)-1}
+    if kind == 'int_array':
+        return {'type':'array', 'maxItems':100, 'items':value_schema('int')}
+    if kind == 'string':
+        return {'type':'string', 'maxLength':1000}
+    return {'type': {'double':'number', 'bool':'boolean'}[kind]}
+
+
+def review_test_schema(signature):
+    """Constrain model tests to logical arguments, not the expanded C ABI."""
+    parameters = signature['parameters']
+    return {'type':'array', 'minItems':3, 'maxItems':5, 'items':{
+        'type':'object', 'additionalProperties':False, 'required':['name','args','expected'],
+        'properties':{'name':{'type':'string','minLength':1,'maxLength':100},
+            'args':{'type':'array','minItems':len(parameters),'maxItems':len(parameters),
+                    'prefixItems':[value_schema(kind) for kind in parameters], 'items':False},
+            'expected':value_schema(signature['returns'])}}}
+
+
 def language_instruction(language):
     if language == 'python':
         return ''
-    shape = ('Provide a complete public class Solution with a public static solve method, no package or main. '
-             if language == 'java' else 'Provide a free solve function, without main. Standard headers may be included. ')
-    return (f'Generate {LABELS[language]} code, not Python. ' + shape +
+    shape = {
+        'java':'Submit public class Solution with a public static solve method; no package or main. Use String and int[]. ',
+        'c':'Submit a free solve function without main. int_array expands to const int *argN, int argN_len. '
+            'The runner supplies lengths: never include them as extra JSON arguments. string is const char *. No array returns. ',
+        'cpp':'Submit a free solve function without main. Use const std::string& and const std::vector<int>& inputs. '
+              'Array returns use std::vector<int>. ',
+    }[language]
+    return (f'Generate {LABELS[language]} code. ' + shape +
         'Select signature.parameters and signature.returns before writing code. '
         'The application requires this type mapping: int=signed 32-bit integer, long=signed 64-bit integer, double=finite number, '
         'bool=boolean, string=ASCII text up to 1000 chars (newline/tab allowed), int_array=0..100 32-bit integers. '
         'Test args contains one JSON value for each declared parameter; nested arrays are one argument. '
-        'C int_array parameters expand to const int *argN, int argN_len; strings are const char *. '
-        'C cannot return an array in this version. C++ strings/arrays use const std::string& / const std::vector<int>&. '
-        'Java uses String and int[]. Other scalar mappings are standard. '
         'Use arg0, arg1, ... for argument names in your code. entrypoint is always solve. '
         'Return values, never print results or parse stdin; the trusted harness handles I/O. '
         'Do not mutate inputs, access files/network, spawn processes, or use third-party dependencies. '
         'List valid input bounds and all edge-case behavior in the question. '
-        'Source fields are plain code, without Markdown fences. No decorators or Python syntax. ')
+        'Source fields are plain code, without Markdown fences. ')

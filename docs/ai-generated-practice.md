@@ -77,11 +77,13 @@ Java, C, and C++ function exercises are also available after compiler setup;
 their typed interfaces and limits are documented in [multilanguage practice](multilanguage-practice.md).
 Inputs and return values must be JSON-compatible. Tasks use small bounded inputs,
 no input mutation, external packages, files, networking, interactive input, or
-nondeterministic services. Each author supplies 3–8 cases, for 6–16 combined cases.
+nondeterministic services. New author and reviewer requests each ask for 3–5 small cases. The reader still
+accepts older 3–8-case responses. Compiled reviewer schemas enforce argument
+count and JSON types; C array lengths are supplied by the harness.
 Generation allows at most two author drafts, two reviews per draft, and one
 expected-value correction per accepted review; sessions contain 1–5 exercises.
 Correction failure aborts immediately rather than triggering another full review.
-The initial author and reviewer each have an 8,000-token output ceiling; incomplete
+Calls use low reasoning; the author and reviewer each retain an 8,000-token output ceiling; incomplete
 or malformed output is rejected. These are limits, not typical answer lengths.
 
 Preparation is deliberately sequential and can take several minutes on local
@@ -95,8 +97,8 @@ Markdown, and code files; 48 KB per file, 12,000 combined characters; ephemeral
 sessions in RAM. The app saves no notes or progress to disk. No web search, RAG,
 PDF parsing, or online source verification is implemented. All supplied notes go
 to the local model directly. Excerpt IDs confirm origin, not interpretation or
-relevance. The reviewer still sees the full notes and selected excerpt to check
-whether they support the exercise. Unknown IDs are rejected rather than silently
+relevance. The reviewer sees the full notes once, without repeated focus-plan or skill
+metadata, to check whether they support the exercise. Unknown IDs are rejected rather than silently
 substituting an unrelated passage. With no notes, the selected ID and quote are
 empty. Short notes remain usable; there is no arbitrary eight-character minimum.
 
@@ -235,3 +237,17 @@ replay tests the captured failure path and actual execution, not the live model'
 ability to generate the correction. Live Ollama generation remains a desktop
 check. The latest automated suite contains 99 tests, with 87 passing and 12
 opt-in Docker tests skipped; the capture replay separately exercised Docker.
+
+## Optimization verification
+
+The streamlined pipeline keeps execution and review checks. Diagnostics record
+response sizes, token counts, and completion reasons without saving hidden
+reasoning text. Large failed reviews are omitted from repair context.
+
+Verification: 146 default tests (124 passed, 22 optional container tests skipped),
+17 real Python runner tests, and 10 real compiled-runner tests passed. Actual
+C/C++ counting probes covered repeats, empty arrays, and a deliberately faulty
+answer. Managed shutdown during a real container request left no containers
+behind. Local HTTP fixtures verified model cancellation and unloading while
+preserving other loaded models. Live GPT-OSS generation speed and completion
+rate still need testing on the desktop; this environment has no running model.

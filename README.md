@@ -1,205 +1,123 @@
-# Project AM
+# AM coding practice
 
-A learning-first, locally hosted AI study assistant.
+Local, notes-guided debugging practice for Python, Java, C, and C++. Choose a
+language, add a topic and optional notes, fix a short program, reveal hints, and
+run its tests. Grading uses restricted execution and host-side comparisons.
 
-## Requirements
-
-- Python 3.10 or newer
-- Local Ollama service
-- Downloaded gpt-oss:20b model
-- Working GPU inference backend
-
-No third-party Python packages are required.
-
-The existing Ollama service should remain bound to loopback with
-OLLAMA_NO_CLOUD=1. These programs do not change those settings.
-
-## Files
-
-- am_core.py: shared local HTTP client and response validation
-- chat.py: interactive chat and temporary conversation history
-- am.py: startup, status, chat, and model unloading
-- context_probe.py: synthetic retrieval benchmark
-- tests/test_terminal.py: offline behavioral tests
-- docs/benchmark-notes.md: initial experimental observations
-
-## Commands
-
-Run from the project directory:
+## Start and stop
 
 ```bash
-python am.py on
-python am.py status
-python am.py chat
+python am.py on --diagnostics
+```
+
+Open **http://127.0.0.1:8090** and keep the launch terminal open. This checks
+Docker, starts the existing Ollama service if necessary, reports the configured
+model's family/size, loads it, and starts the website. Models are not downloaded
+and compiler images are not rebuilt. Start with one exercise per session.
+
+Press **Ctrl+C** in the launch terminal to switch off, or use another terminal:
+
+```bash
 python am.py off
+python am.py status
 ```
 
-`on` starts the existing Ollama service and checks API readiness.
-It does not enable startup at boot.
+Shutdown cancels active model requests and container work, waits for cleanup,
+and unloads only the models selected for the practice website. Shared Docker
+and Ollama services remain available for Open WebUI. Sessions and editor drafts
+are in memory; finish or save your work before switching off.
 
-`off` unloads gpt-oss:20b and leaves Ollama running.
-It does not delete model files or stop other services.
-Close other clients using the selected model before unloading it.
+Stop an older `practice_web.py` with Ctrl+C once before using these commands.
+An unrelated process on the requested port is never killed. Ownership records
+live in Git-ignored `.am-runtime/`.
 
-To unload a different installed model:
+With sudo-based Docker, the launch terminal may ask for authorization. After an
+idle credential expiry, keep the browser open, press Ctrl+Z in the launch terminal,
+run `sudo -v`, then `fg` and retry. Existing direct Docker access is detected
+automatically. Group memberships and sudo policies are unchanged.
+
+## Your AI model
+
+The website defaults to **`am-study:latest`**. The repository's
+[Modelfile](infrastructure/Modelfile) derives it from **`gpt-oss:20b`** with a
+32,768-token context. Startup reports metadata from the actual installed tag;
+a name alone cannot establish which weights are installed on a machine.
+
+An exercise normally uses two sequential calls to that local model: an author
+and a blind reviewer. The reviewer sees the task and notes but not the author's
+reference or tests. Both solutions must pass the combined cases; the starter
+must demonstrate a failing result. Project files are not automatically read
+into model context. There is no web search or RAG in this workflow.
+
+Small structured tasks use low reasoning and request 3–5 small tests per call.
+Compiled-language review schemas enforce declared types and the logical input
+count. C array lengths are supplied by the runner, not extra JSON arguments.
+Validation and bounded repair remain in place. Passing tests and model agreement
+do not establish universal correctness.
+
+Select other already-installed models with:
 
 ```bash
-python am.py off --model qwen3:14b
+python am.py on --model am-study:latest --review-model YOUR_LOCAL_MODEL
 ```
 
-## Chat commands
-
-- /help: show command help
-- /status: show settings, history count, and loaded models
-- /clear: reset this client's conversation history
-- /bye: exit the client
-
-History exists only in RAM and is not saved between sessions.
-Clearing history does not securely erase process memory or server caches.
-
-Failed requests are not added to history.
-Interrupted requests may still finish on the server.
-Exiting chat does not immediately unload the model.
-
-## History limits
-
-Default settings:
-
-- 8,192-token context
-- 1,500-token generation limit
-- Six successful exchanges
-- 12,000-character text budget
-
-The client requests an explicit /clear when its bounds are reached.
-It does not automatically summarize or silently discard old turns.
-
-Character limits and previous token measurements are not exact preflight
-token counting. They cannot guarantee the server never truncates input.
-
-Inspect options:
+If the alias is missing, with `gpt-oss:20b` already installed:
 
 ```bash
-python chat.py --help
+ollama create am-study -f infrastructure/Modelfile
 ```
 
-The default reasoning setting is low, matching GPT-OSS.
-Other models may require different reasoning settings.
+## One-time language setup
 
-## Tests
+Requirements: Python 3.10+, local Ollama and its installed model, and Docker on
+Linux. Application code uses only Python's standard library. Preserve the
+existing loopback-only Ollama/Open WebUI installation.
 
-```bash
-python -m unittest discover -s tests -v
-```
-
-These tests simulate responses and service operations.
-They do not establish live GPU readiness.
-
-## Benchmark
-
-```bash
-python context_probe.py --records 600 --seed 42
-python context_probe.py --records 1800 --seed 43
-```
-
-Optionally save raw evidence outside the repository:
-
-```bash
-python context_probe.py --records 1800 --seed 43 --output /tmp/am-probe-43.json
-```
-
-Existing output files are not overwritten.
-
-The probe scores exact values using structured JSON output.
-This differs from the original free-text benchmark.
-Keep both sets of observations separately.
-
-Repeated input can benefit from prompt caching.
-Different models may use different tokenizers and reasoning settings.
-Generation throughput is not the same as end-to-end latency.
-One successful run does not establish general accuracy or hardware limits.
-
-## AI-generated coding practice
-
-The browser starts with "What are we studying today?" Choose a language, enter a topic,
-and paste notes or add a small text/Markdown/code file. AM authors a debugging
-exercise, starter, solution, hints, and tests. A separate, blind review call derives
-another solution and more tests without seeing the author's solution or tests.
-Both solutions must pass the combined cases in the restricted Docker runner,
-and the starter must expose a logic bug before the exercise is published.
+Python uses the pinned image in `infrastructure/python-runner-image.txt`.
+To enable Java 21, C17, and C++17:
 
 ```bash
 sudo systemctl start docker
 sudo -v
-python am.py on
-python practice_web.py
-```
-
-Open `http://127.0.0.1:8090`. Start with one exercise; generation, review, and
-container checks can take several minutes. The page reports preparation stages.
-Practice, reveal hints, run tests, and review the session summary. Keep the
-terminal open; Ctrl+C stops the app. Do not launch the app itself as root.
-
-The author defaults to `am-study:latest`. The reviewer defaults to a separate call
-to that same model, which is **not independent evidence from a different model**.
-To use another already-installed model:
-
-```bash
-python practice_web.py --model am-study:latest --review-model YOUR_INSTALLED_MODEL
-```
-
-AI agreement and passing tests do not prove correctness. The runner determines
-student test results; no AI decides pass/fail. Model-authored code, like student
-code, executes only in restricted containers. This is a local prototype, not a
-public hostile-code service.
-
-Python works with the existing runner. To enable Java 21, C17, and C++17, build
-and probe the compiler runtime once, then restart the website:
-
-```bash
-sudo -v
 python tools/setup_compiled_runtime.py
-python practice_web.py --diagnostics
 ```
 
-The setup builds a local Docker image containing the compilers; it does not change
-Ollama or Open WebUI. Language buttons become available after all three compiler
-probes pass and the app restarts. See [language setup and supported exercises](docs/multilanguage-practice.md).
+Wait for three compiler probes and `Compiler runtime ready`. Normal setup works
+with legacy Docker builds and BuildKit. See [language setup and limits](docs/multilanguage-practice.md).
 
-PDF/slides, persistent progress, web research, and document retrieval are not implemented. The provided
-notes are sent directly to local Ollama as numbered excerpts. AM selects an
-excerpt ID; the app inserts the original text rather than asking AM to copy it.
-There is no web search or automatic source verification in this milestone.
+## Project layout
 
-Previous template modes remain explicit options:
+| Area | Responsibility |
+| --- | --- |
+| `am.py`, `site_control.py` | Website/model lifecycle and ownership |
+| `practice_web.py`, `web/` | Local API and student interface |
+| `ai_exercises.py`, `language_contracts.py` | Drafting, review, and typed contracts |
+| `code_runner.py`, `compiled_runner.py`, `compiled_driver.py`, `native_harness.py` | Restricted execution and grading |
+| `practice_sessions.py` | In-memory sessions and summaries |
+| `exercise_families.py`, `practice_planner.py` | Explicit Python template modes |
+| `tools/`, `examples/`, `tests/` | Setup, benchmarks, examples, and verification |
+| `docs/history/` | Earlier milestones and terminal-client documentation |
+
+Archive the recognized old untracked `study_app.py`/`study/` prototype reversibly:
 
 ```bash
-python practice_web.py --templates  # AM selects among reviewed families
-python practice_web.py --offline    # Keyword selection; no model calls
+python tools/archive_legacy.py          # Preview
+python tools/archive_legacy.py --apply # Archive locally; never delete
 ```
 
-Those older template modes support Python only.
+Model-only commands remain explicit: `am.py model-on`, `model-status`, and
+`model-off --model NAME`. `am.py chat` is the separate terminal client.
+`practice_web.py` remains a direct website entry point. `--offline` and
+`--templates` are Python-only options, never automatic fallbacks.
 
-A failed generated draft never silently becomes a template question. Each
-exercise gets at most two drafts; if preparation fails, no partial session is
-published. Original runner commands and exercises remain available.
-
-Reviewer failures now repair the review separately. When both solutions disagree
-with a reviewer's expected answer, the reviewer can explicitly approve a targeted
-expected-value correction; unchanged code and inputs are preserved, and the
-corrected case must pass execution again. Failed corrections abort preparation.
-They do not silently change test answers, remove failing cases, or regenerate an
-otherwise valid author question.
-
-For troubleshooting, launch with `--diagnostics`. Rejected generated code and
-tests are saved locally to `.am-diagnostics/last-generation.json` (Git-ignored,
-owner-only on creation). Inspect its generated content before sharing it. Normal
-launches do not save this trace. Syntax errors now report the code role and line.
+## Verification
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-See [AI-generated practice](docs/ai-generated-practice.md) for the architecture,
-checks, limitations, and validation record. Earlier milestones are documented in
-[notes-guided practice](docs/notes-guided-practice.md) and
-[browser practice](docs/browser-practice.md).
+Default tests use controlled model/service fixtures. Optional real-container
+checks and validation records are in [multilanguage practice](docs/multilanguage-practice.md).
+`--diagnostics` stores rejected drafts locally in `.am-diagnostics/` and logs
+bounded execution errors. Inspect generated content before sharing it. Token
+counts and truncation reasons are recorded without saving hidden reasoning.

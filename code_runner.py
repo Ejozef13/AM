@@ -130,6 +130,7 @@ class DockerRunner:
         self.image = image
         self.command = list(command)
         self.wall_seconds = wall_seconds
+        self.cancel_event = None
 
     def remove(self, name):
         """Remove only the uniquely named container we created."""
@@ -159,6 +160,8 @@ class DockerRunner:
 
     def run(self, source, entrypoint, args):
         """Execute one function call with bounded input and output."""
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise RunnerError('Execution canceled because the website is stopping.')
         if not isinstance(source, str) or len(source.encode()) > 16000:
             raise RunnerError("Submission must be at most 16,000 UTF-8 bytes.")
 
@@ -221,8 +224,21 @@ class DockerRunner:
         deadline = time.monotonic() + self.wall_seconds
 
         try:
+            # Finish creation before attaching input or starting student code.
+            # Killing a combined `docker run` during image setup can leave a
+            # daemon-side create request that registers after cleanup returned.
+            create_command = list(command)
+            create_command[len(self.command)] = 'create'
+            created = subprocess.run(create_command, capture_output=True, text=True,
+                                     timeout=max(60,self.wall_seconds))
+            if created.returncode:
+                self.check_authorization(created.stderr)
+                raise RunnerError('Docker could not create the test container: '+created.stderr[:500])
+            if self.cancel_event is not None and self.cancel_event.is_set():
+                raise RunnerError('Execution canceled because the website is stopping.')
+            deadline = time.monotonic()+self.wall_seconds
             process = subprocess.Popen(
-                command,
+                self.command + ['start','--attach','--interactive',name],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -240,6 +256,8 @@ class DockerRunner:
                 selector.register(process.stdout, selectors.EVENT_READ)
 
                 while selector.get_map():
+                    if self.cancel_event is not None and self.cancel_event.is_set():
+                        raise RunnerError('Execution canceled because the website is stopping.')
                     remaining = deadline - time.monotonic()
 
                     if remaining <= 0:
@@ -378,7 +396,15 @@ class DockerRunner:
                 if not removed:
                     # A Docker create request can finish after an early rm saw no
                     # container. Recheck after the client has exited or been killed.
-                    self.remove(name)
+                    removed = self.remove(name)
+                    if not removed and process is not None:
+                        # The daemon can finish a slow create after its client
+                        # has exited. Drain that request within the startup
+                        # allowance, then remove only our unique container.
+                        cleanup_deadline = max(deadline, time.monotonic()+10)
+                        while not removed and time.monotonic() < cleanup_deadline:
+                            time.sleep(0.2)
+                            removed = self.remove(name)
 
     def request_payload(self, source, entrypoint, args):
         return {"source": source, "entrypoint": entrypoint, "args": args}

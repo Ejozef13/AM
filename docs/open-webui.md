@@ -12,8 +12,8 @@ From the project root:
 
 ```bash
 sudo systemctl start docker
-python am.py on
-sudo docker compose --env-file infrastructure/.env.openwebui -f infrastructure/compose.yaml up -d
+python am.py model-on
+sudo docker compose --env-file infrastructure/.env.openwebui -f infrastructure/compose.yaml up -d open-webui
 ```
 
 Initial startup can take time. Verify readiness:
@@ -27,8 +27,8 @@ curl --fail --show-error --max-time 10 http://127.0.0.1:8080/health
 Finish active requests first:
 
 ```bash
-sudo docker compose --env-file infrastructure/.env.openwebui -f infrastructure/compose.yaml stop
-python am.py off
+sudo docker compose --env-file infrastructure/.env.openwebui -f infrastructure/compose.yaml stop open-webui
+python am.py model-off --model gpt-oss:20b
 ```
 
 This preserves application data and leaves Docker and Ollama running.
@@ -38,7 +38,7 @@ It does not stop unrelated services.
 
 ```bash
 sudo docker compose --env-file infrastructure/.env.openwebui -f infrastructure/compose.yaml ps
-python am.py status
+python am.py model-status
 ```
 
 ## Storage and configuration

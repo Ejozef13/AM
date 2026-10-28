@@ -34,7 +34,9 @@ class CompiledRunner(DockerRunner):
         self.signature = validate_signature(language, signature) if signature is not None else None
 
     def with_signature(self, signature):
-        return CompiledRunner(self.image, self.language, signature, self.command, self.wall_seconds)
+        runner = CompiledRunner(self.image, self.language, signature, self.command, self.wall_seconds)
+        runner.cancel_event = self.cancel_event
+        return runner
 
     def run(self, source, entrypoint, args):
         result = super().run(source, entrypoint, args)
