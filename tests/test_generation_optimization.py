@@ -96,6 +96,34 @@ class GenerationOptimizationTests(unittest.TestCase):
             typed_cases({'parameters': ['int'], 'returns': 'int'},
                         [{'name': 'wrong type', 'args': ['code expression'], 'expected': 0}])
 
+    def test_starter_crash_after_wrong_answer_is_rejected_with_repair_evidence(self):
+        generator = OllamaExerciseGenerator(FixtureRunner())
+        lesson = {'starter_code': 'fixture', 'entrypoint': 'solve', 'tests': [
+            {'name': 'wrong answer', 'args': [[2]], 'expected': 2},
+            {'name': 'empty array', 'args': [[]], 'expected': 0}]}
+        with patch('ai_exercises.grade_case', side_effect=[
+                {'status': 'failed'},
+                {'status': 'runtime_error', 'message': 'load of null pointer'}]) as grade:
+            with self.assertRaises(DraftRejected) as caught:
+                generator.check_starter(lesson)
+        self.assertEqual(grade.call_count, 2)
+        self.assertIn('empty array', str(caught.exception))
+        self.assertIn('"args": [[]]', str(caught.exception))
+        self.assertIn('Preserve the task and valid input domain', str(caught.exception))
+        self.assertEqual(lesson['tests'][0]['name'], 'wrong answer')
+
+    def test_safe_wrong_answer_is_moved_first_after_all_starter_cases_are_checked(self):
+        generator = OllamaExerciseGenerator(FixtureRunner())
+        lesson = {'starter_code': 'fixture', 'entrypoint': 'solve', 'tests': [
+            {'name': 'passes', 'args': [[2]], 'expected': 2},
+            {'name': 'wrong answer', 'args': [[]], 'expected': 0},
+            {'name': 'also passes', 'args': [[3]], 'expected': 3}]}
+        with patch('ai_exercises.grade_case', side_effect=[
+                {'status': 'passed'}, {'status': 'failed'}, {'status': 'passed'}]) as grade:
+            generator.check_starter(lesson)
+        self.assertEqual(grade.call_count, 3)
+        self.assertEqual(lesson['tests'][0]['name'], 'wrong answer')
+
     def test_truncation_metadata_records_counts_without_hidden_reasoning(self):
         generator = OllamaExerciseGenerator(FixtureRunner())
         truncated = {'done':True,'done_reason':'length','eval_count':8000,

@@ -75,7 +75,7 @@ class GeneratedTests(unittest.TestCase):
         self.assertEqual(len(lessons[0]["tests"]), 6)
         self.assertEqual(lessons[0]["quality"]["reference_runs"], 12)
         self.assertFalse(lessons[0]["quality"]["distinct_models"])
-        self.assertEqual(len(self.runner.calls), 13)
+        self.assertEqual(len(self.runner.calls), 18)  # Both references and the starter run all six cases.
         payload = api.call_args_list[1].args[1]
         exercise = json.loads(payload["messages"][1]["content"])["exercise"]
         self.assertNotIn("reference_solution", exercise)

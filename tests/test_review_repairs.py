@@ -99,7 +99,7 @@ class ReviewRepairTests(unittest.TestCase):
         self.assertEqual(allowed['minItems'], 1)
         self.assertEqual(allowed['maxItems'], 1)
         # Two failed observations, followed by two new runs with the corrected expected value.
-        self.assertEqual(sum(args == [LITERAL] for _, _, args in self.runner.calls), 4)
+        self.assertEqual(sum(args == [LITERAL] and source != STARTER for source, _, args in self.runner.calls), 4)
 
     def test_malformed_reviewer_code_repairs_only_review(self):
         bad = reviewed(False) | {'reference_solution': 'A man, a plan, a canal, Panama'}

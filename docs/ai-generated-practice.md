@@ -251,3 +251,15 @@ answer. Managed shutdown during a real container request left no containers
 behind. Local HTTP fixtures verified model cancellation and unloading while
 preserving other loaded models. Live GPT-OSS generation speed and completion
 rate still need testing on the desktop; this environment has no running model.
+
+## Starter execution failures
+
+Preparation checks the starter against every combined case, including cases after
+the first wrong answer. At least one wrong answer is required; crashes, undefined
+behavior detected by the runtime, and resource failures reject the draft. The
+bounded author retry receives the failing case name and input, runtime message,
+and instructions to preserve the task and valid input domain while making the
+starter safe to execute. This improves repair evidence without guaranteeing a
+model will produce an acceptable draft. Custom linked-list node types are not
+supported as runner parameters; current native inputs use the documented basic
+types and integer arrays.
