@@ -102,9 +102,8 @@ metadata, to check whether they support the exercise. Unknown IDs are rejected r
 substituting an unrelated passage. With no notes, the selected ID and quote are
 empty. Short notes remain usable; there is no arbitrary eight-character minimum.
 
-`--templates` retains the reviewed-family mode with AM focus selection.
-`--offline` uses explicit keyword matching and reviewed templates without any
-model calls. Neither is an automatic fallback after AI-generation failure.
+All sessions require AI generation. There is no built-in exercise bank,
+keyword planner, template fallback, or standalone default lesson endpoint.
 
 ## Accuracy and limits
 

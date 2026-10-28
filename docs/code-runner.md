@@ -1,68 +1,45 @@
-# Python exercise runner
+# Execution and grading
+
+Every student exercise starts as an AI draft and independent review. There are
+no bundled exercise files or standalone default questions. The browser's coding
+workspace shows the generated starter and lets the student edit code, request
+hints, run tests, and inspect expected/actual results.
+
+The session owns the task and tests. Both `/api/run` and `/api/hint` require a
+valid session ID and current exercise index. The old `/api/lesson` endpoint is
+removed. Generated reference solutions and hidden test data remain on the server
+until results or hints are requested through the supported workflow.
 
 ## Architecture
 
-Student source and test inputs enter a restricted Docker container.
-Expected answers stay on the host, where actual results are compared.
-No AI participates in grading.
+`ai_exercises.py` validates draft structure using `lesson_validation.py` and
+checks author/reviewer solutions using the same runner as student submissions.
+Student source and inputs enter a restricted container; expected results stay
+on the host, where actual results are compared. AI does not grade submissions.
 
-Each test uses a fresh container.
-
-## Runtime restrictions
-
-- Pinned Python image
-- No network access beyond container loopback
-- No project-directory mounts
-- Unprivileged user
-- Read-only root filesystem
-- Temporary writable workspace
-- Dropped Linux capabilities and no new privileges
-- Memory, CPU, process, wall-time, and output limits
-
+Each test uses a fresh container with a pinned runtime, no external network,
+no project-directory mounts, an unprivileged user, a read-only root filesystem,
+a temporary workspace, dropped capabilities, and resource/output limits.
 This is a local prototype, not a public hostile-code execution service.
 
-## Run an exercise
+Syntax errors and runtime errors are returned as test evidence. Infrastructure
+failures produce no overall grade. The app keeps the in-memory session so the
+student can restore Docker access and retry. Passing cases is not proof for all
+possible inputs.
 
-From the project root:
-
-Save your own solution as `solution.py`, then run:
-
-```bash
-sudo -v
-python run_submission.py exercises/python/largest_value.json solution.py
-```
-
-The bundled lesson is also used by the website's default lesson endpoint and tests.
-
-Exit codes:
-- 0: all reviewed cases passed
-- 1: one or more cases did not pass
-- 2: infrastructure or configuration failure
-- 130: interrupted
-
-Passing reviewed cases is not proof of correctness for every input.
-
-## Authoring checks
+## Regression checks
 
 ```bash
-python tools/validate_lesson.py exercises/python/largest_value.json
+python -m unittest discover -s tests -v
 ```
 
-The --check-trusted-code option executes author code directly on the host.
-Never use that authoring option for student submissions.
-
-## Regression tests
+Real Python container checks, with Docker running:
 
 ```bash
 sudo -v
 env AM_DOCKER_TESTS=1 python -m unittest discover -s tests -p test_code_runner.py -v
 ```
 
-Verified on the desktop:
-- All 13 tests passed.
-- Correct and incorrect results were distinguished.
-- Input mutation was detected.
-- Syntax errors, runtime errors, excessive output, and timeouts were handled.
-- No am-case- containers remained afterward.
-
-Default test discovery skips Docker integration tests unless explicitly enabled.
+Default discovery skips optional Docker integration checks. Controlled examples
+inside `tests/` exist only to test the software, never as a question bank.
+See [compiled-language setup](multilanguage-practice.md) for Java, C, and C++.

@@ -18,7 +18,7 @@ the installed model; Docker compiles and executes submissions.
 | Sample notes | `web/app.js`: `sample` click handler |
 | Setup mode explanation | `web/app.js`: `/api/setup` response handler at the bottom |
 | Generation progress text | `ai_exercises.py`: calls to `self.progress` |
-| Supported languages and setup metadata | `practice_planner.py`: `LANGUAGES`; `practice_web.py`: `/api/setup` |
+| Supported languages and setup metadata | `study_input.py`: `LANGUAGES`; `practice_web.py`: `/api/setup` |
 
 Start the app with `python am.py on --diagnostics`. Edit a frontend file, save,
 and refresh the browser. No rebuild is needed. Refreshing during a session can
@@ -42,24 +42,20 @@ AM/
 ├── practice_sessions.py        Session lifecycle, attempts, next, and summary
 ├── ai_exercises.py             AI author, blind review, repair, execution checks
 ├── language_contracts.py       Supported native types and function signatures
-├── practice_planner.py         Input validation and explicit template planning
-├── exercise_families.py        Reviewed Python templates for offline/template mode
+├── study_input.py              Student topic, notes, difficulty, language validation
 ├── generation_diagnostics.py   Optional local rejected-generation reports
 ├── code_runner.py              Container lifecycle and host-side result grading
 ├── compiled_runner.py          Java/C/C++ runner configuration
 ├── compiled_driver.py          Compile/run supervision inside the container
 ├── native_harness.py           Language-specific wrappers around solve(...)
-├── run_submission.py           Lesson loading and optional command-line grading
+├── lesson_validation.py        Structural checks and strict JSON comparisons
 ├── web/
 │   ├── index.html              Page structure and static text
 │   ├── app.css                 Theme, components, responsive layout
 │   └── app.js                  Browser state, API calls, hints, results, summary
-├── exercises/python/
-│   └── largest_value.json      Default lesson used by the API and regression checks
 ├── tools/
 │   ├── setup_compiled_runtime.py  One-time Java/C/C++ compiler setup
-│   ├── check_runner_runtime.py    Python runtime probe and image pinning
-│   └── validate_lesson.py         Shared lesson validation and authoring CLI
+│   └── check_runner_runtime.py    Python runtime probe and image pinning
 ├── infrastructure/
 │   ├── Modelfile               am-study alias built from gpt-oss:20b
 │   ├── python-runner-image.txt Pinned Python runtime image
@@ -70,13 +66,13 @@ AM/
 └── docs/                       Current setup, architecture, limits, roadmap
 ```
 
-The old example lesson is still referenced by the server and tests. Template
-modules are still used by `--offline` and `--templates`. Tests, image pins,
-validators, and runtime setup tools are maintained parts of the application.
-Existing search configuration is kept for the user's separate service; the
-practice generator does not call it. Old milestone notes, duplicate example
-submissions, the context benchmark tool, and the completed archive helper have
-been removed. Git history retains those tracked files.
+There is no bundled exercise directory or question bank. Every question, starter,
+reference, hint, and test set comes from the AI preparation pipeline. The editor
+and results panel are the local coding workspace. Regression fixtures stay only
+in `tests/`, where model and Docker responses can be checked repeatably; they are
+not accessible as student practice content. Shared validators, image pins, and
+runtime setup tools remain part of the app. Existing search configuration is
+kept for the user's separate service; the practice generator does not call it.
 
 ## What happens when you build a session
 
@@ -94,7 +90,7 @@ flowchart TD
 ```
 
 Invalid drafts receive bounded repair attempts. Unresolved failures stop
-preparation; they never silently become another topic or a template exercise.
+preparation; they never silently become another topic or a prewritten exercise.
 The reviewer receives the task and notes, not the author's reference or tests.
 
 ## Runtime data outside Git

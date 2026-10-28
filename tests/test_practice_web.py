@@ -11,19 +11,30 @@ import urllib.request
 
 from code_runner import RunnerError
 from practice_web import PracticeApp, make_server
-from run_submission import load_lesson
+from ai_exercises import validate_draft
+from test_multilanguage_generation import native_draft
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class PracticeWebTests(unittest.TestCase):
     def setUp(self):
-        self.lesson = load_lesson(ROOT / "exercises/python/largest_value.json")
+        # Fixed service fixture: never shipped or offered as an app question.
+        raw = native_draft('c')
+        raw.pop('signature')
+        raw['notes_quote'] = ''
+        raw.update(entrypoint='solve', starter_code='def solve(values): return 0',
+                   reference_solution='def solve(values): return max(values)')
+        self.lesson = validate_draft(raw, '', 'standard')
+        self.lesson['quality'] = dict(source='ai-generated', separate_review=True,
+                                      distinct_models=False, reference_runs=6)
         self.runner = Mock()
         self.runner.run.side_effect = lambda source, entrypoint, args: {
             "status": "ok", "value": max(args[0]), "args_after": args, "output": "",
         }
-        self.app = PracticeApp(self.lesson, self.runner)
+        self.app = PracticeApp(self.runner, Mock())
+        key, _ = self.app.sessions.publish([self.lesson], {}, 'Test fixture')
+        self.fields = {'session_id': key, 'lesson_index': 0}
         self.server = make_server(self.app, 0)
         self.origin = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -36,6 +47,8 @@ class PracticeWebTests(unittest.TestCase):
         self.thread.join(timeout=3)
 
     def request(self, path, data=None, headers=None):
+        if data is not None:
+            data = self.fields | data
         supplied = {"Origin": self.origin, "Content-Type": "application/json"}
         if headers:
             supplied.update(headers)
@@ -50,13 +63,18 @@ class PracticeWebTests(unittest.TestCase):
             return error.code, error.read(), error.headers
 
     def test_public_lesson_has_no_reference_key_or_hints(self):
-        status, raw, _ = self.request("/api/lesson")
-        lesson = json.loads(raw)
-        self.assertEqual(status, 200)
+        lesson = self.app.public_lesson(self.lesson)
         self.assertNotIn("reference_solution", lesson)
         self.assertNotIn("tests", lesson)
         self.assertNotIn("hints", lesson)
-        self.assertEqual(lesson["test_count"], 8)
+        self.assertEqual(lesson["test_count"], 3)
+        self.assertEqual(self.request('/api/lesson')[0], 404)
+
+    def test_grading_and_hints_require_a_generated_session(self):
+        self.fields = {}
+        self.assertEqual(self.request('/api/run', {'source': 'fixture'})[0], 400)
+        self.assertEqual(self.request('/api/hint', {'index': 0})[0], 400)
+        self.runner.run.assert_not_called()
 
     def test_reply_tolerates_a_browser_disconnecting_during_headers_or_body(self):
         for field, error in [('end_headers', ConnectionResetError()), ('write', BrokenPipeError())]:
@@ -83,11 +101,11 @@ class PracticeWebTests(unittest.TestCase):
         status, raw, _ = self.request("/api/run", {"source": "def largest_value(xs): return max(xs)"})
         result = json.loads(raw)
         self.assertEqual(status, 200)
-        self.assertEqual((result["passed"], result["total"]), (8, 8))
+        self.assertEqual((result["passed"], result["total"]), (3, 3))
         self.assertTrue(result["complete"])
-        self.assertEqual(self.runner.run.call_count, 8)
-        self.assertEqual(self.runner.run.call_args_list[0].args[2], [[3, 8, 2]])
-        self.assertEqual(result["results"][0]["args"], [[3, 8, 2]])
+        self.assertEqual(self.runner.run.call_count, 3)
+        self.assertEqual(self.runner.run.call_args_list[0].args[2], [[-8, -3]])
+        self.assertEqual(result["results"][0]["args"], [[-8, -3]])
 
     def test_syntax_error_is_a_test_result(self):
         self.runner.run.side_effect = None
@@ -97,7 +115,7 @@ class PracticeWebTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["passed"], 0)
         self.assertEqual(result["results"][0]["status"], "syntax_error")
-        self.assertEqual(result["results"][0]["args"], [[3, 8, 2]])
+        self.assertEqual(result["results"][0]["args"], [[-8, -3]])
 
     def test_result_inputs_distinguish_empty_strings_quotes_and_newlines(self):
         inputs = ["", "''", "\n", r"\n"]
@@ -114,14 +132,14 @@ class PracticeWebTests(unittest.TestCase):
         self.assertEqual(results[1]["status"], "failed")
 
     def test_result_inputs_do_not_alias_authored_tests(self):
-        result = self.app.run("fixture submission")
+        result = self.app.run("fixture submission", self.fields)
         result["results"][0]["args"][0].append(999)
-        self.assertEqual(self.lesson["tests"][0]["args"], [[3, 8, 2]])
+        self.assertEqual(self.lesson["tests"][0]["args"], [[-8, -3]])
 
     def test_display_evidence_preserves_large_integers_and_float_types(self):
         self.lesson['tests'] = [{'name':'precision', 'args':[2**63-1], 'expected':1.0}]
         self.runner.run.side_effect = lambda source, entrypoint, args: {'status':'ok','value':1,'args_after':args}
-        result = self.app.run('fixture')['results'][0]
+        result = self.app.run('fixture', self.fields)['results'][0]
         self.assertEqual(result['args_json'], '[9223372036854775807]')
         self.assertEqual(result['expected_json'], '1.0')
         self.assertEqual(result['actual_json'], '1')
@@ -157,14 +175,14 @@ class PracticeWebTests(unittest.TestCase):
         }
         status, raw, _ = self.request("/api/run", {"source": "code"})
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(raw)["passed"], 1)
+        self.assertEqual(json.loads(raw)["passed"], 0)
 
     def test_hint_sequence_and_invalid_indexes(self):
         for index, expected in enumerate(self.lesson["hints"]):
             status, raw, _ = self.request("/api/hint", {"index": index})
             self.assertEqual(status, 200)
             self.assertEqual(json.loads(raw)["hint"], expected)
-        for index in (-1, 3, True, "0"):
+        for index in (-1, 1, True, "0"):
             self.assertEqual(self.request("/api/hint", {"index": index})[0], 400)
         self.runner.run.assert_not_called()
 

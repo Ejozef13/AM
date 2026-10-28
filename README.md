@@ -78,9 +78,13 @@ Failed drafts receive bounded repairs. Model agreement and passing tests are
 useful evidence, not proof of correctness. No web search or RAG is enabled.
 Custom linked-list node inputs are not supported yet.
 
-`--offline` and `--templates` retain explicit Python template workflows; neither
-is a silent fallback after generation fails. `am.py chat` is optional terminal
-chat. Open WebUI remains independent of the practice website.
+Every practice session is AI-generated. There is no bundled question bank,
+prewritten exercise generator, or offline/template fallback. Run tests and hints
+only within a generated session. Fixed examples in `tests/` simulate model and
+runner responses for regression checks; the app never serves them as questions.
+
+`am.py chat` is optional terminal chat. Open WebUI remains independent of the
+practice website.
 
 ## Guides
 

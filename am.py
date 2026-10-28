@@ -107,8 +107,6 @@ def main(argv=None):
     on.add_argument('--model',default=PRACTICE_MODEL)
     on.add_argument('--review-model')
     on.add_argument('--docker-direct',action='store_true')
-    on.add_argument('--offline',action='store_true')
-    on.add_argument('--templates',action='store_true')
     on.add_argument('--diagnostics',action='store_true')
     commands.add_parser("status", help="Show installed and loaded models")
     commands.add_parser('model-on',help='Start only the existing Ollama service')
@@ -134,10 +132,7 @@ def main(argv=None):
         elif args.command == "status":
             from site_control import status as site_status
             state = site_status()
-            if state and state.get('offline'):
-                print('Offline practice: this website does not load an AI model.')
-            else:
-                status()
+            status()
         elif args.command == "off":
             from site_control import stop
             stop(unload,args.model)

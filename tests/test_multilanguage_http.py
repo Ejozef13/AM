@@ -10,7 +10,6 @@ import urllib.request
 from ai_exercises import OllamaExerciseGenerator
 from code_runner import DockerAuthorizationError
 from practice_web import PracticeApp, make_server
-from run_submission import load_lesson
 from test_multilanguage_generation import NativeFixtureRunner, native_draft, native_review, reply
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +20,7 @@ class LanguageHttpTests(unittest.TestCase):
         self.python = Mock()
         self.runtimes = {'python': self.python, **{lang: NativeFixtureRunner(lang) for lang in ('java','c','cpp')}}
         self.generator = OllamaExerciseGenerator(self.python, runtimes=self.runtimes)
-        self.app = PracticeApp(load_lesson(ROOT/'exercises/python/largest_value.json'), self.python,
+        self.app = PracticeApp(self.python,
                                generator=self.generator, runtimes=self.runtimes)
         self.server = make_server(self.app, 0)
         self.origin = f'http://127.0.0.1:{self.server.server_address[1]}'
@@ -60,12 +59,6 @@ class LanguageHttpTests(unittest.TestCase):
                 status, summary = self.request('/api/session/next', fields)
                 self.assertEqual(summary['summary']['completed'], 1)
         self.python.run.assert_not_called()
-
-    def test_template_mode_does_not_advertise_compilers_as_working_templates(self):
-        self.app.sessions.generator = None
-        _, setup = self.request('/api/setup')
-        self.assertEqual([lang['id'] for lang in setup['languages'] if lang['available']], ['python'])
-        self.assertEqual(self.request('/api/session', {'language':'java','topic':'arrays'})[0], 400)
 
     def test_authorization_recovery_keeps_the_java_exercise_and_does_not_regenerate(self):
         with patch('ai_exercises.api', side_effect=[reply(native_draft('java')), reply(native_review('java'))]) as model:

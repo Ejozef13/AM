@@ -1,13 +1,10 @@
-"""Bounded, in-memory study sessions using reviewed exercise generators."""
+"""Bounded, in-memory study sessions using AI-generated, execution-checked exercises."""
 
 from dataclasses import dataclass, field
-import secrets
 import time
 import uuid
 
-from code_runner import RunnerError, grade_case
-from exercise_families import generate_lesson
-from practice_planner import study_input
+from study_input import study_input
 
 
 @dataclass
@@ -31,8 +28,9 @@ class PracticeSession:
 
 
 class SessionStore:
-    def __init__(self, planner, runner, generator=None):
-        self.planner, self.runner = planner, runner
+    def __init__(self, generator):
+        if generator is None:
+            raise ValueError("An AI exercise generator is required.")
         self.generator = generator
         self.sessions = {}
 
@@ -48,23 +46,9 @@ class SessionStore:
             raise ValueError("Too many open sessions. Finish a session or restart this local app.")
         allowed = tuple(self.generator.runtimes) if self.generator is not None and hasattr(self.generator, 'runtimes') else ('python',)
         topic, notes, count, difficulty = study_input(data, allowed)
-        if self.generator is not None:
-            generator = self.generator.for_language(data['language']) if hasattr(self.generator, 'for_language') else self.generator
-            lessons, plan, label = generator.build(topic, notes, difficulty, count)
-            return self.publish(lessons, plan, label)
-        plan = self.planner.plan(topic, notes)
-        lessons = [generate_lesson(plan["family"], difficulty, secrets.randbits(32)) for _ in range(count)]
-        # Validate actual generated artifacts with the same execution boundary used
-        # by students. Do not publish a variant with a broken reference or inert bug.
-        for lesson in lessons:
-            for case in lesson["tests"]:
-                result = grade_case(self.runner, lesson["reference_solution"], lesson["entrypoint"], case, True)
-                if result["status"] != "passed":
-                    raise RunnerError("A generated reference did not pass. No session was published.")
-            regression = grade_case(self.runner, lesson["starter_code"], lesson["entrypoint"], lesson["tests"][0], True)
-            if regression["status"] != "failed":
-                raise RunnerError("The intended starter bug was not detected. No session was published.")
-        return self.publish(lessons, plan, self.planner.label)
+        generator = self.generator.for_language(data['language']) if hasattr(self.generator, 'for_language') else self.generator
+        lessons, plan, label = generator.build(topic, notes, difficulty, count)
+        return self.publish(lessons, plan, label)
 
     def publish(self, lessons, plan, label):
         key = uuid.uuid4().hex

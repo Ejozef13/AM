@@ -7,10 +7,8 @@ from unittest.mock import Mock, patch
 from ai_exercises import DraftRejected, OllamaExerciseGenerator, validate_draft
 from code_runner import RunnerError
 from language_contracts import function_header, validate_signature
-from practice_planner import KeywordPlanner
 from practice_sessions import SessionStore
 from practice_web import PracticeApp
-from run_submission import load_lesson
 from pathlib import Path
 
 SIGNATURE = {'parameters': ['int_array'], 'returns': 'int'}
@@ -66,7 +64,7 @@ class NativeGenerationTests(unittest.TestCase):
     py = Mock(); native = NativeFixtureRunner(language)
     runtimes = {'python': py, language: native}
     generator = OllamaExerciseGenerator(py, runtimes=runtimes)
-    store = SessionStore(KeywordPlanner(), py, generator)
+    store = SessionStore(generator)
     with patch('ai_exercises.api', side_effect=[reply(native_draft(language)), reply(native_review(language))]) as api:
      key, session = store.create({'language': language, 'topic': 'array maximum', 'notes': '', 'count': 1})
     lesson = session.lessons[0]
@@ -76,8 +74,7 @@ class NativeGenerationTests(unittest.TestCase):
     review_task = json.loads(api.call_args_list[1].args[1]['messages'][1]['content'])['exercise']
     self.assertEqual(review_task['signature'], SIGNATURE)
     self.assertNotIn('reference_solution', review_task)
-    app = PracticeApp(load_lesson(Path(__file__).resolve().parents[1]/'exercises/python/largest_value.json'),
-                      py, generator=generator, runtimes=runtimes)
+    app = PracticeApp(py, generator=generator, runtimes=runtimes)
     app.sessions = store
     result = app.run(lesson['reference_solution'], {'session_id': key, 'lesson_index': 0})
     self.assertEqual(result['passed'], 6)
@@ -93,10 +90,6 @@ class NativeGenerationTests(unittest.TestCase):
    with self.subTest(language=language), self.assertRaises(DraftRejected):
     validate_draft({**bad, 'notes_quote': ''}, '', 'standard', language)
 
- def test_template_mode_does_not_accept_unconfigured_compiled_languages(self):
-  store = SessionStore(KeywordPlanner(), Mock())
-  with self.assertRaises(ValueError):
-   store.create({'language': 'java', 'topic': 'maximum'})
 
 
 if __name__ == '__main__':

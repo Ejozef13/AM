@@ -14,21 +14,18 @@ from am_core import AMError, PRACTICE_MODEL
 from ai_exercises import OllamaExerciseGenerator
 from generation_diagnostics import DiagnosticRecorder
 from compiled_runner import CompiledRunner
-from exercise_families import CATALOG
-from practice_planner import LANGUAGES, KeywordPlanner, OllamaPlanner
+from study_input import LANGUAGES
 from practice_sessions import SessionStore
-from run_submission import load_lesson
 
 ROOT = Path(__file__).resolve().parent
 
 
 class PracticeApp:
-    def __init__(self, lesson, runner, planner=None, generator=None, runtimes=None, diagnostics=False):
-        self.lesson = lesson
+    def __init__(self, runner, generator, runtimes=None, diagnostics=False):
         self.runner = runner
         self.runtimes = runtimes or {'python': runner}
         self.busy = threading.Lock()
-        self.sessions = SessionStore(planner or OllamaPlanner(), runner, generator)
+        self.sessions = SessionStore(generator)
         self.progress = "Ready"
         self.diagnostics = diagnostics
         self.stop_event = threading.Event()
@@ -51,32 +48,27 @@ class PracticeApp:
                 'operation': operation, 'error_type': type(error).__name__,
                 'detail': str(error)[:1200]}), file=sys.stderr, flush=True)
 
-    def public_lesson(self, lesson=None):
+    def public_lesson(self, lesson):
         # Explicit allowlist: reference solution, hints and answer keys stay off
         # the initial response. Hints are disclosed only when requested.
         keys = ("id", "title", "language", "difficulty", "instructions",
                 "constraints", "skills", "starter_code")
-        lesson = self.lesson if lesson is None else lesson
         return {**{key: lesson[key] for key in keys},
                 **({"required_signature": lesson['required_signature']} if 'required_signature' in lesson else {}),
                 "quality": {key: lesson["quality"][key] for key in
                             ("source", "separate_review", "distinct_models", "reference_runs")}
-                           | {"review_test_repairs": lesson["quality"].get("review_test_repairs", 0)}
-                           if "quality" in lesson else {"source": "reviewed-template"},
+                           | {"review_test_repairs": lesson["quality"].get("review_test_repairs", 0)},
                 "test_count": len(lesson["tests"]),
                 "hint_count": len(lesson["hints"])}
 
-    def run(self, source, session_data=None):
+    def run(self, source, session_data):
         # Source is passed only to the container, never exec'd on the host.
         if not isinstance(source, str) or not source.strip():
             raise ValueError("Enter some code first.")
         if len(source.encode("utf-8")) > 16000:
             raise ValueError("Keep the submission below 16,000 UTF-8 bytes.")
-        session = None
-        lesson = self.lesson
-        if session_data is not None:
-            _, session = self.sessions.get(session_data)
-            lesson = session.lessons[session.index]
+        _, session = self.sessions.get(session_data)
+        lesson = session.lessons[session.index]
         runner = self.runner
         if lesson['language'] != 'python':
             if lesson['language'] not in self.runtimes:
@@ -137,19 +129,16 @@ def make_server(app, port=8090):
             if not self.valid_host():
                 self.reply(403, {"error": "Use this application's loopback address."})
                 return
-            if self.path == "/api/lesson":
-                self.reply(200, app.public_lesson())
-                return
             if self.path == "/api/setup":
                 generator = app.sessions.generator
                 languages = []
                 for language in LANGUAGES:
-                    available = language['id'] == 'python' or (generator is not None and language['id'] in app.runtimes)
+                    available = language['id'] in app.runtimes
                     languages.append({**language, 'available': available,
-                        'disabled_reason': '' if available else ('AI-generated mode required' if not generator else 'Compiler runtime setup required')})
-                self.reply(200, {"languages": languages, "families": CATALOG,
-                                 "mode": "ai-generated" if generator else "templates",
-                                 "planner_label": generator.label if generator else app.sessions.planner.label})
+                        'disabled_reason': '' if available else 'Compiler runtime setup required'})
+                self.reply(200, {"languages": languages,
+                                 "mode": "ai-generated",
+                                 "planner_label": generator.label})
                 return
             if self.path == "/api/progress":
                 self.reply(200, {"message": app.progress, "busy": app.busy.locked()})
@@ -204,17 +193,15 @@ def make_server(app, port=8090):
                 elif self.path == "/api/session/finish":
                     status, payload = 200, app.sessions.finish(data)
                 elif self.path == "/api/hint":
-                    lesson = app.lesson
-                    if "session_id" in data:
-                        _, session = app.sessions.get(data)
-                        lesson = session.lessons[session.index]
+                    _, session = app.sessions.get(data)
+                    lesson = session.lessons[session.index]
                     index = data.get("index")
                     hints = lesson["hints"]
                     if type(index) is not int or not 0 <= index < len(hints):
                         raise ValueError("No hint at that position.")
                     status, payload = 200, {"index": index, "hint": hints[index]}
                 else:
-                    status, payload = 200, app.run(data.get("source"), data if "session_id" in data else None)
+                    status, payload = 200, app.run(data.get("source"), data)
             except ValueError as error:
                 status, payload = 400, {"error": str(error)}
             except AMError as error:
@@ -253,8 +240,6 @@ def main(argv=None, on_ready=None):
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--docker-direct", action="store_true",
                         help="Only use when already authorized to access Docker directly")
-    parser.add_argument("--offline", action="store_true", help="Use explicit keyword matching instead of AM planning")
-    parser.add_argument("--templates", action="store_true", help="Use the previous reviewed-template mode")
     parser.add_argument("--model", default=PRACTICE_MODEL, help="Local Ollama author model")
     parser.add_argument("--review-model", help="Optional installed Ollama reviewer model; defaults to a separate call to the author model")
     parser.add_argument("--diagnostics", action="store_true",
@@ -263,7 +248,6 @@ def main(argv=None, on_ready=None):
     if not 0 <= args.port <= 65535:
         parser.error("Port must be between 0 and 65535.")
     try:
-        lesson = load_lesson(ROOT / "exercises/python/largest_value.json")
         image = (ROOT / "infrastructure/python-runner-image.txt").read_text().strip()
         command = ("docker",) if args.docker_direct else ("sudo", "-n", "docker")
         runner = DockerRunner(image, command=command)
@@ -283,20 +267,19 @@ def main(argv=None, on_ready=None):
                 runtimes.update(candidates)
             except (ValueError, OSError, RunnerError, subprocess.SubprocessError):
                 print('Compiler runtime unavailable. Run: python tools/setup_compiled_runtime.py', flush=True)
-        planner = KeywordPlanner() if args.offline else OllamaPlanner(args.model)
-        generator = None if args.offline or args.templates else OllamaExerciseGenerator(
+        generator = OllamaExerciseGenerator(
             runner, args.model, args.review_model,
             diagnostics=DiagnosticRecorder(ROOT / ".am-diagnostics") if args.diagnostics else None,
             runtimes=runtimes)
-        server = make_server(PracticeApp(lesson, runner, planner, generator, runtimes,
+        server = make_server(PracticeApp(runner, generator, runtimes,
                                        diagnostics=args.diagnostics), args.port)
     except (OSError, ValueError, RunnerError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Cannot start: {error}\nCheck Docker, then run sudo -v before restarting.\n")
     print(f"AM coding practice: http://127.0.0.1:{server.server_address[1]}", flush=True)
     print("No AI grading. Keep this terminal open; Ctrl+C stops the app.", flush=True)
-    print(generator.label if generator else planner.label, flush=True)
+    print(generator.label, flush=True)
     print('Languages ready: ' + ', '.join(language['label'] for language in LANGUAGES
-          if language['id'] == 'python' or (generator and language['id'] in runtimes)), flush=True)
+          if language['id'] == 'python' or language['id'] in runtimes), flush=True)
     if args.diagnostics:
         print("Diagnostics enabled: rejected generated code/tests will be saved locally to "
               f"{ROOT / '.am-diagnostics/last-generation.json'}. Inspect before sharing.", flush=True)

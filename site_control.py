@@ -116,25 +116,21 @@ def serve(args, start_ollama, unload_model):
         if port_busy(args.port):
             raise AMError(f'Port {args.port} is in use. Stop the old website in its launch terminal first.')
         state = {'root':str(ROOT),'pid':os.getpid(),'start':identity(os.getpid()),
-                 'port':args.port,'phase':'starting','models':[],'offline':args.offline}
+                 'port':args.port,'phase':'starting','models':[]}
         save_state(state)
         try:
             direct = docker_access(args.docker_direct)
-            if not args.offline:
-                start_ollama()
-                models = list(dict.fromkeys([args.model, args.review_model or args.model]))
-                if args.templates:
-                    models = [args.model]
-                for model in models:
-                    print('AI:', model_description(model), flush=True)
-                state['models'] = models
-                save_state(state)
-                print('Loading the practice model…', flush=True)
-                api('/api/generate', {'model':args.model,'stream':False,'keep_alive':'5m',
-                                     'options':{'num_ctx':32768}}, timeout=180)
+            start_ollama()
+            models = list(dict.fromkeys([args.model, args.review_model or args.model]))
+            for model in models:
+                print('AI:', model_description(model), flush=True)
+            state['models'] = models
+            save_state(state)
+            print('Loading the practice model…', flush=True)
+            api('/api/generate', {'model':args.model,'stream':False,'keep_alive':'5m',
+                                 'options':{'num_ctx':32768}}, timeout=180)
             flags = ['--port',str(args.port),'--model',args.model]
-            for enabled, flag in [(direct,'--docker-direct'), (args.offline,'--offline'),
-                                  (args.templates,'--templates'), (args.diagnostics,'--diagnostics')]:
+            for enabled, flag in [(direct,'--docker-direct'), (args.diagnostics,'--diagnostics')]:
                 if enabled:
                     flags.append(flag)
             if args.review_model:

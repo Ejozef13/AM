@@ -9,7 +9,6 @@ let submittedSource = null;
 let session = null;
 let selectedLanguage = "python";
 let lastRun = null;
-let generationMode = false;
 const languageLabels = {python: "Python", java: "Java", c: "C", cpp: "C++"};
 const labels = {compile_error: "Compiler error", passed: "Passed", failed: "Incorrect result", timeout: "Time limit",
   output_limit: "Output limit", syntax_error: "Syntax error", runtime_error: "Runtime error",
@@ -70,12 +69,11 @@ function renderSession(view) {
   $("intro-eyebrow").textContent = "ONE SMALL CHALLENGE";
   $("intro-title").textContent = "Find the bug. Understand the fix.";
   $("intro-description").textContent = view.planner_label;
-  const generated = lesson.quality && lesson.quality.source === "ai-generated";
-  $("quality-note").textContent = generated ? `AI draft · separate ${lesson.quality.distinct_models ? "model" : "review call (same model)"} · two solutions passed ${lesson.test_count} combined tests. These checks can still miss mistakes.` : "Reviewed template exercise.";
-  if (generated && lesson.quality.review_test_repairs) {
+  $("quality-note").textContent = `AI draft · separate ${lesson.quality.distinct_models ? "model" : "review call (same model)"} · two solutions passed ${lesson.test_count} combined tests. These checks can still miss mistakes.`;
+  if (lesson.quality.review_test_repairs) {
     $("quality-note").textContent += ` ${lesson.quality.review_test_repairs} reviewer expected value(s) corrected and rechecked.`;
   }
-  $("hint-description").textContent = generated ? "AI-authored hints checked in a separate review. Reveal one when you need it." : "Hints are reviewed lesson content. Reveal one when you need it.";
+  $("hint-description").textContent = "AI-authored hints checked in a separate review. Reveal one when you need it.";
   $("title").textContent = lesson.title; $("instructions").textContent = lesson.instructions;
   $("constraints").replaceChildren(); $("skills").replaceChildren();
   for (const text of lesson.constraints) addText($("constraints"), "li", text);
@@ -199,7 +197,7 @@ fetch("/api/setup").then(async (response) => {
   if (!response.ok) throw new Error("Could not load practice options.");
   const setup = await response.json();
   for (const language of setup.languages) {
-    const button = addText($("languages"), "button", language.label + (language.available ? "" : setup.mode === "ai-generated" ? " · setup needed" : " · AI mode"), "language");
+    const button = addText($("languages"), "button", language.label + (language.available ? "" : " · setup needed"), "language");
     button.type = "button"; button.disabled = !language.available; button.title = language.disabled_reason || "";
     button.dataset.available = String(language.available); button.setAttribute("aria-pressed", String(language.id === selectedLanguage));
     button.addEventListener("click", () => {
@@ -209,10 +207,9 @@ fetch("/api/setup").then(async (response) => {
       button.setAttribute("aria-pressed", "true");
     });
   }
-  generationMode = setup.mode === "ai-generated";
-  $("mode-title").textContent = generationMode ? "AI-GENERATED PRACTICE" : "REVIEWED TEMPLATE PRACTICE";
-  $("family-list").textContent = generationMode ? "Questions built around your topic and notes" : setup.families.map((family) => family.title).join(" · ");
-  $("mode-description").textContent = generationMode ? "AM drafts a debugging question. A separate review solves it independently, then both solutions must pass the combined tests. Start with one exercise. Notes guide the question; web research is not enabled." : "Available families use reviewed generators with execution checks. Other topics need AI-generated mode.";
+  $("mode-title").textContent = "AI-GENERATED PRACTICE";
+  $("family-list").textContent = "Questions built around your topic and notes";
+  $("mode-description").textContent = "AM drafts a debugging question. A separate review solves it independently, then both solutions must pass the combined tests. Start with one exercise. Notes guide the question; web research is not enabled.";
   const missingRuntime = setup.mode === "ai-generated" && setup.languages.some((language) => !language.available);
   $("runtime-setup").hidden = !missingRuntime;
   $("runtime-setup").textContent = missingRuntime ? "To enable Java, C, and C++: run sudo -v, then python tools/setup_compiled_runtime.py in your terminal, and restart this app." : "";

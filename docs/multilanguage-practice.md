@@ -86,10 +86,8 @@ Submission source remains limited to 16,000 UTF-8 bytes. The container request
 limit is 32 KB for Python and 128 KB for compiled languages, accommodating escaped
 typed literals without increasing source or input-value bounds.
 
-`run_submission.py LESSON.json SOURCE --docker-direct` also supports these typed
-compiled lessons after setup. Omit the flag when using the default sudo Docker
-access. Existing Python lesson files still work. `--templates` and `--offline`
-remain explicit Python-only modes; AI failures never silently select a template.
+All questions are created through the AI session workflow. Grading and hints
+require a generated session; no bundled lesson or template mode is available.
 
 ## Execution limits
 

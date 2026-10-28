@@ -8,7 +8,7 @@ import uuid
 
 from am_core import AMError, PRACTICE_MODEL, api
 from code_runner import RunnerError, grade_case
-from tools.validate_lesson import equivalent, validate_lesson
+from lesson_validation import equivalent, validate_lesson
 from language_contracts import (LABELS, language_instruction, function_header, signature_schema,
                                 review_test_schema, typed_cases, validate_signature)
 

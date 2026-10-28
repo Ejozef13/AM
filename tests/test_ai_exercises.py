@@ -11,7 +11,6 @@ from ai_exercises import (DRAFT_SCHEMA, REVIEW_SCHEMA, DraftRejected, OllamaExer
                           bind_evidence, cases, note_excerpts, source_contract, validate_draft)
 from am_core import AMError
 from code_runner import RunnerError
-from practice_planner import KeywordPlanner
 from practice_sessions import SessionStore
 
 NOTES = "Factorial multiplies the integers from 1 through n. The factorial of zero is 1."
@@ -297,7 +296,7 @@ class GeneratedTests(unittest.TestCase):
             self.assertEqual(len(self.build()[0]), 1)
 
     def test_unreachable_model_does_not_retry_or_publish(self):
-        store = SessionStore(KeywordPlanner(), self.runner, self.generator)
+        store = SessionStore(self.generator)
         with patch("ai_exercises.api", side_effect=AMError("Cannot reach Ollama")) as api:
             with self.assertRaises(AMError):
                 store.create({"language": "python", "topic": "factorial", "notes": NOTES, "count": 1})
@@ -343,7 +342,7 @@ class GeneratedTests(unittest.TestCase):
         self.assertEqual(api.call_count, 2)
 
     def test_partial_session_not_published_when_later_question_fails(self):
-        store = SessionStore(KeywordPlanner(), self.runner, self.generator)
+        store = SessionStore(self.generator)
         with patch("ai_exercises.api", side_effect=[response(draft()), response(review()),
                                                     response({}), response({})]):
             with self.assertRaises(AMError):
