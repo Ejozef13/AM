@@ -49,6 +49,12 @@ REVIEW_SCHEMA = object_schema({
     "reference_solution": string_schema(TEXT_LIMITS["reference_solution"]), "tests": TESTS_SCHEMA,
     "feedback": string_schema(300),
 })
+STRING_TEST_FORMAT = (
+    'Test strings are literal JSON values, not source-code expressions. '
+    'For an empty string use args=[""]; a string containing two quote characters is not empty. '
+    'A newline character and the two literal characters backslash+n are different inputs. '
+    'Do not add source-code quotation marks inside a string or reinterpret characters based on a test name. '
+)
 CORRECTION_SCHEMA = object_schema({
     "approved": {"type": "boolean"}, "feedback": string_schema(300),
     "corrections": {"type": "array", "minItems": 1, "maxItems": 8,
@@ -412,6 +418,7 @@ class OllamaExerciseGenerator:
                         "Use native JSON fields args and expected. args is an array of positional arguments: "
                         "for a function taking one string use args=[\"level\"], and for one list use args=[[1,2,3]]. "
                         "expected is the JSON return value, e.g. true or 6. Do not encode JSON inside strings. "
+                        + STRING_TEST_FORMAT +
                         "Source fields contain plain code with actual newline characters, not Markdown fences. "
                         "Select evidence_id from the supplied note_excerpts IDs to support this task; "
                         "explain relevance in reason. Do not copy or generate a notes_quote field. "
@@ -483,6 +490,7 @@ class OllamaExerciseGenerator:
                     "You do not receive the author's solution or tests. Independently derive your own solution "
                     "and 3–5 concise expected tests, including boundaries. Use concrete small inputs, normally at most 12 elements. "
                     "Use native JSON args and expected, never code expressions or JSON strings. "
+                    + STRING_TEST_FORMAT +
                     "For one string parameter use args=[\"level\"]; for one list use args=[[1,2,3]]. "
                     "reference_solution must contain ONLY complete code in the selected language implementing the required interface. "
                     "feedback must be one or two short plain sentences, NEVER code or a worked solution. "
@@ -605,8 +613,17 @@ class OllamaExerciseGenerator:
                     raise RunnerError("Reference execution could not be evaluated.")
                 results.append(result)
                 if role == "author" and index < author_count and result["status"] != "passed":
+                    evidence = {'status':result['status'], 'expected':case['expected'],
+                                'actual':result.get('actual'), 'message':result.get('message'),
+                                'strings':[{'argument_index':i,'length':len(arg),'repr':repr(arg)[:100],
+                                            'codepoints':[ord(char) for char in arg[:32]]}
+                                           for i,arg in enumerate(case['args']) if isinstance(arg,str)],
+                                'args':case['args'], 'input_modified':result.get('input_modified')}
                     raise AuthorDraftError(f"Author solution failed its own test {case['name']}: {result['status']}. "
-                                           + json.dumps(result)[:1100])
+                                           + json.dumps(evidence, ensure_ascii=True)[:1050]
+                                           + ' Repair the reference or inconsistent test to match the task. '
+                                             'Inspect the exact input characters; literal quotes are not empty text. '
+                                             'Do not change correct behavior merely to match an incorrect expected value.')
             if all(result["status"] == "passed" for result in results):
                 continue
             if (index >= author_count and all(result["status"] == "failed" and not result.get("input_modified")

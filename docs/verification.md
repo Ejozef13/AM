@@ -36,6 +36,9 @@ be reused within preparation; a changed expectation must be checked again.
   specification. Agreement alone does not authorize the correction.
 - Corrections can replace only the flagged reviewer expected values, not remove
   tests, change inputs, or rewrite the task. The corrected cases run again.
+- Author-reference failures include exact test arguments plus string lengths,
+  literal representations, and character codes in repair feedback. Test names
+  such as "empty string" do not override the actual input characters.
 - Starter repair receives the failing input and runtime evidence, while keeping
   the task and valid domain. It still must expose a wrong answer safely.
 - Infrastructure failures abort preparation; they do not become student failures.
