@@ -6,15 +6,22 @@ import selectors
 import subprocess
 import time
 import uuid
+from pathlib import Path
 
 
 class RunnerError(Exception):
     """An infrastructure failure, not an incorrect student answer."""
 
 
+class DockerAuthorizationError(RunnerError):
+    """The sudo credential needed to start/clean up a container is unavailable."""
+
+
 # This program executes INSIDE the container.
 # Student source is never executed in the host process.
-DRIVER = r"""
+STRUCTURE_RUNTIME = (Path(__file__).resolve().parent / "structures.py").read_text()
+
+DRIVER = STRUCTURE_RUNTIME + "\n" + r"""
 import contextlib
 import io
 import json
@@ -37,12 +44,13 @@ class BoundedOutput(io.StringIO):
         return super().write(text)
 
 
-data = json.load(sys.stdin)
+# One newline-delimited request avoids waiting for Docker to forward stdin EOF.
+data = json.loads(sys.stdin.readline())
 output = BoundedOutput()
 
 try:
     with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-        namespace = {"__name__": "submission"}
+        namespace = {"__name__": "submission", "ListNode":ListNode, "TreeNode":TreeNode, "Graph":Graph}
 
         exec(
             compile(data["source"], "submission.py", "exec"),
@@ -53,7 +61,7 @@ try:
         if not callable(function):
             raise ValueError("Required function is missing.")
 
-        args = data["args"]
+        args = decode(data["args"])
         value = function(*args)
 
         if output.exceeded:
@@ -61,8 +69,8 @@ try:
 
         record = {
             "status": "ok",
-            "value": value,
-            "args_after": args,
+            "value": encode(value),
+            "args_after": encode(args, data["args"]),
         }
 
         # The result must be representable by our JSON protocol.
@@ -102,38 +110,61 @@ def equivalent(first, second):
 
 
 class DockerRunner:
+    payload_limit = 32000
+    memory = "128m"
+    pids = "32"
+    nofile = "64:64"
+    cpu_limit = "2:2"
+    temporary_filesystem = "/tmp:rw,noexec,nosuid,nodev,size=16m"
+    driver = DRIVER
+
+    def valid_image(self, image):
+        return re.fullmatch(r"(?:docker\.io/library/)?python@sha256:[0-9a-f]{64}", image)
+
     def __init__(
         self,
         image,
         command=("sudo", "-n", "docker"),
         wall_seconds=15,
     ):
-        if not re.fullmatch(
-            r"(?:docker\.io/library/)?python@sha256:[0-9a-f]{64}",
-            image,
-        ):
-            raise RunnerError("Use the Python digest saved by the runtime check.")
+        if not self.valid_image(image):
+            raise RunnerError("Use the immutable runtime image ID or digest saved by setup.")
 
         self.image = image
         self.command = list(command)
         self.wall_seconds = wall_seconds
+        self.cancel_event = None
 
     def remove(self, name):
         """Remove only the uniquely named container we created."""
-        result = subprocess.run(
-            self.command + ["rm", "-f", name],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        for attempt in range(2):
+            try:
+                result = subprocess.run(self.command + ["rm", "-f", name],
+                                        capture_output=True, text=True, timeout=10)
+            except subprocess.TimeoutExpired as error:
+                if attempt == 0:
+                    continue  # Removal may already have completed on the daemon.
+                raise RunnerError('Could not confirm container cleanup after two attempts.') from error
+            if not result.returncode:
+                return True
+            self.check_authorization(result.stderr)
+            if 'No such container' in result.stderr:
+                return False
+            if attempt == 0 and 'removal of container' in result.stderr and 'in progress' in result.stderr:
+                continue
+            raise RunnerError('Could not confirm container cleanup: ' + result.stderr[:400])
 
-        if result.returncode and "No such container" not in result.stderr:
-            raise RunnerError(
-                "Could not confirm container cleanup: " + result.stderr[:400]
-            )
+    def check_authorization(self, output):
+        if (self.command and self.command[0].rsplit('/', 1)[-1] == 'sudo'
+                and 'sudo:' in output.lower()
+                and any(text in output.lower() for text in
+                        ('password is required', 'a terminal is required', 'authentication is required'))):
+            raise DockerAuthorizationError('Docker sudo authorization is unavailable or expired.')
 
     def run(self, source, entrypoint, args):
         """Execute one function call with bounded input and output."""
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise RunnerError('Execution canceled because the website is stopping.')
         if not isinstance(source, str) or len(source.encode()) > 16000:
             raise RunnerError("Submission must be at most 16,000 UTF-8 bytes.")
 
@@ -143,16 +174,9 @@ class DockerRunner:
         if not isinstance(args, list):
             raise RunnerError("Test arguments must be a list.")
 
-        payload = json.dumps(
-            {
-                "source": source,
-                "entrypoint": entrypoint,
-                "args": args,
-            },
-            allow_nan=False,
-        ).encode()
+        payload = json.dumps(self.request_payload(source, entrypoint, args), allow_nan=False).encode() + b'\n'
 
-        if len(payload) > 32000:
+        if len(payload) > self.payload_limit:
             raise RunnerError("Submission and test inputs exceed the prototype limit.")
 
         name = "am-case-" + uuid.uuid4().hex
@@ -175,19 +199,19 @@ class DockerRunner:
             "--security-opt",
             "no-new-privileges=true",
             "--memory",
-            "128m",
+            self.memory,
             "--memory-swap",
-            "128m",
+            self.memory,
             "--cpus",
             "0.5",
             "--pids-limit",
-            "32",
+            self.pids,
             "--ulimit",
-            "nofile=64:64",
+            "nofile=" + self.nofile,
             "--ulimit",
-            "cpu=2:2",
+            "cpu=" + self.cpu_limit,
             "--tmpfs",
-            "/tmp:rw,noexec,nosuid,nodev,size=16m",
+            self.temporary_filesystem,
             "-i",
             self.image,
             "python",
@@ -195,7 +219,7 @@ class DockerRunner:
             "-B",
             "-u",
             "-c",
-            DRIVER,
+            self.driver,
         ]
 
         process = None
@@ -203,8 +227,21 @@ class DockerRunner:
         deadline = time.monotonic() + self.wall_seconds
 
         try:
+            # Finish creation before attaching input or starting student code.
+            # Killing a combined `docker run` during image setup can leave a
+            # daemon-side create request that registers after cleanup returned.
+            create_command = list(command)
+            create_command[len(self.command)] = 'create'
+            created = subprocess.run(create_command, capture_output=True, text=True,
+                                     timeout=max(60,self.wall_seconds))
+            if created.returncode:
+                self.check_authorization(created.stderr)
+                raise RunnerError('Docker could not create the test container: '+created.stderr[:500])
+            if self.cancel_event is not None and self.cancel_event.is_set():
+                raise RunnerError('Execution canceled because the website is stopping.')
+            deadline = time.monotonic()+self.wall_seconds
             process = subprocess.Popen(
-                command,
+                self.command + ['start','--attach','--interactive',name],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -222,6 +259,8 @@ class DockerRunner:
                 selector.register(process.stdout, selectors.EVENT_READ)
 
                 while selector.get_map():
+                    if self.cancel_event is not None and self.cancel_event.is_set():
+                        raise RunnerError('Execution canceled because the website is stopping.')
                     remaining = deadline - time.monotonic()
 
                     if remaining <= 0:
@@ -272,6 +311,8 @@ class DockerRunner:
                 }
 
             # Docker startup failures are not learner failures.
+            if code:
+                self.check_authorization(captured.decode(errors='replace'))
             if code in {125, 126, 127}:
                 raise RunnerError(
                     "Docker could not execute the test: "
@@ -298,6 +339,8 @@ class DockerRunner:
                 "output_limit",
                 "syntax_error",
                 "runtime_error",
+                "compile_error",
+                "timeout",
             }
 
             if (
@@ -323,8 +366,9 @@ class DockerRunner:
                         pipe.close()
 
             # Stopping the Docker client alone doesn't stop its container.
+            removed = False
             try:
-                self.remove(name)
+                removed = self.remove(name)
 
             finally:
                 if process:
@@ -352,6 +396,21 @@ class DockerRunner:
                     for pipe in (process.stdin, process.stdout):
                         if pipe and not pipe.closed:
                             pipe.close()
+                if not removed:
+                    # A Docker create request can finish after an early rm saw no
+                    # container. Recheck after the client has exited or been killed.
+                    removed = self.remove(name)
+                    if not removed and process is not None:
+                        # The daemon can finish a slow create after its client
+                        # has exited. Drain that request within the startup
+                        # allowance, then remove only our unique container.
+                        cleanup_deadline = max(deadline, time.monotonic()+10)
+                        while not removed and time.monotonic() < cleanup_deadline:
+                            time.sleep(0.2)
+                            removed = self.remove(name)
+
+    def request_payload(self, source, entrypoint, args):
+        return {"source": source, "entrypoint": entrypoint, "args": args}
 
 
 def grade_case(

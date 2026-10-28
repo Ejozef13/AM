@@ -1,10 +1,10 @@
-"""Entry point: python am.py {on,status,off,chat}."""
+"""Switch the AM practice website and its local AI on or off."""
 
 import argparse
 import subprocess
 import time
 
-from am_core import AMError, DEFAULT_MODEL, api
+from am_core import AMError, DEFAULT_MODEL, PRACTICE_MODEL, api
 from chat import main as chat_main
 
 
@@ -82,6 +82,7 @@ def unload(model):
             "keep_alive": 0,
             "stream": False,
         },
+        timeout=30,
     )
 
     # Verify the requested state instead of assuming the call worked.
@@ -101,24 +102,45 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
 
-    commands.add_parser("on", help="Start Ollama and check readiness")
+    on = commands.add_parser("on", help="Start the practice website and its AI; keep this terminal open")
+    on.add_argument('--port',type=int,default=8090)
+    on.add_argument('--model',default=PRACTICE_MODEL)
+    on.add_argument('--review-model')
+    on.add_argument('--docker-direct',action='store_true')
+    on.add_argument('--diagnostics',action='store_true')
     commands.add_parser("status", help="Show installed and loaded models")
+    commands.add_parser('model-on',help='Start only the existing Ollama service')
+    commands.add_parser('model-status',help='Show only Ollama status')
     commands.add_parser("chat", help="Open default terminal chat")
 
     off = commands.add_parser(
         "off",
-        help="Unload selected model; leave Ollama running",
+        help="Stop the managed website and unload its selected AI models",
     )
-    off.add_argument("--model", default=DEFAULT_MODEL)
+    off.add_argument("--model", default=PRACTICE_MODEL)
+    model_off = commands.add_parser('model-off',help='Unload just one model; leave services running')
+    model_off.add_argument('--model',default=DEFAULT_MODEL)
 
     args = parser.parse_args(argv)
+    if args.command == 'on' and not 0 <= args.port <= 65535:
+        parser.error('Port must be between 0 and 65535.')
 
     try:
         if args.command == "on":
-            start()
+            from site_control import serve
+            serve(args,start,unload)
         elif args.command == "status":
+            from site_control import status as site_status
+            state = site_status()
             status()
         elif args.command == "off":
+            from site_control import stop
+            stop(unload,args.model)
+        elif args.command == 'model-on':
+            start()
+        elif args.command == 'model-status':
+            status()
+        elif args.command == 'model-off':
             unload(args.model)
         else:
             chat_main([])

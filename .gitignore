@@ -5,3 +5,9 @@ venv/
 .env
 .env.*
 !.env.example
+.am-diagnostics/
+.am-runtime/
+.am-archive/
+
+.am-data/
+benchmark-results/

@@ -2,56 +2,75 @@
 
 import http.client
 import json
-import urllib.error
-import urllib.request
+import os
+import socket
+import threading
+from urllib.parse import urlsplit
 
-BASE_URL = "http://127.0.0.1:11434"
+BASE_URL = os.environ.get('AM_OLLAMA_URL', 'http://127.0.0.1:11434')
 DEFAULT_MODEL = "gpt-oss:20b"
+PRACTICE_MODEL = "am-study:latest"
 
 
 class AMError(Exception):
     """An expected failure that can be displayed without a traceback."""
 
 
-def api(path, payload=None, timeout=600):
+def api(path, payload=None, timeout=600, cancel_event=None):
     """Send GET without a payload, or POST with a JSON payload."""
 
     data = None
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
 
-    request = urllib.request.Request(
-        BASE_URL + path,
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-
-    # This connection is explicitly local. Don't route it through a proxy.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-
+    address = urlsplit(BASE_URL)
+    if address.scheme != 'http' or address.hostname not in ('127.0.0.1', 'localhost', '::1'):
+        raise AMError('Ollama must use a local HTTP address.')
+    connection = http.client.HTTPConnection(address.hostname, address.port or 80, timeout=min(timeout,10))
+    finished = threading.Event()
+    watcher = None
     try:
-        with opener.open(request, timeout=timeout) as response:
-            result = json.load(response)
-
-    except urllib.error.HTTPError as error:
-        # Ollama often includes a useful explanation in its error response.
-        detail = ""
-        try:
-            body = json.loads(error.read(4096).decode("utf-8"))
-            detail = str(body.get("error", ""))[:400]
-        except (ValueError, AttributeError):
-            pass
-
-        raise AMError(f"Ollama HTTP {error.code}: {detail or error.reason}") from error
-
-    except urllib.error.URLError as error:
-        raise AMError("Cannot reach local Ollama. Run: python am.py on") from error
-
+        if cancel_event is not None and cancel_event.is_set():
+            raise AMError('Generation canceled because the website is stopping.')
+        connection.connect()
+        wire = connection.sock
+        wire.settimeout(timeout)
+        def watch_cancel():
+            while not finished.wait(0.1):
+                if cancel_event.is_set():
+                    try:
+                        wire.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+                    return
+        if cancel_event is not None:
+            watcher = threading.Thread(target=watch_cancel, daemon=True)
+            watcher.start()
+        # http.client connects directly; environment proxy settings are ignored.
+        connection.request('POST' if payload is not None else 'GET', path, body=data,
+                           headers={'Content-Type':'application/json'})
+        response = connection.getresponse()
+        if response.status >= 400:
+            detail = response.read(4096).decode('utf-8', errors='replace')
+            try:
+                detail = str(json.loads(detail).get('error', response.reason))
+            except (ValueError, AttributeError):
+                detail = response.reason
+            raise AMError(f'Ollama HTTP {response.status}: {detail[:400]}')
+        result = json.load(response)
     except (OSError, TimeoutError, http.client.HTTPException) as error:
-        raise AMError("Connection failed or timed out. Check Ollama status.") from error
-
+        if cancel_event is not None and cancel_event.is_set():
+            raise AMError('Generation canceled because the website is stopping.') from error
+        raise AMError("Cannot reach local Ollama or the request timed out. Run: python am.py model-on") from error
     except (ValueError, UnicodeError) as error:
+        if cancel_event is not None and cancel_event.is_set():
+            raise AMError('Generation canceled because the website is stopping.') from error
         raise AMError("Ollama returned invalid JSON.") from error
+    finally:
+        finished.set()
+        connection.close()
+        if watcher:
+            watcher.join(timeout=1)
 
     # A valid JSON response must also have the structure we expect.
     if not isinstance(result, dict):
