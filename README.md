@@ -1,56 +1,208 @@
-# AM · Coding practice
+# AM · Local AI coding practice
 
-AM is an AI-powered coding practice app inspired by Duolingo, built for computer
-science students. Turn pasted class notes or articles, or uploaded text files,
-into short debugging sessions in a built-in browser editor. Choose **Python, Java, C, or C++**,
-fix a generated program, reveal hints, run tests, and review your session.
-AM runs locally with Ollama and grades code using restricted Docker execution.
-Progressive hints, saved sessions, daily goals, and streaks support regular practice.
-The circuit background feeds the AM logo and brightens while requests run;
-reduced-motion preferences keep it static. AM's character draws on Harlan Ellison's *I Have No Mouth, and I Must Scream*:
-theatrical, sarcastic, and quietly invested in your progress. The sarcasm targets
-bugs and humanity's habits, never a student's intelligence or circumstances.
+AM is a local AI coding practice app inspired by Duolingo, built for computer
+science students. Bring your class notes, an article, or a topic, choose
+**Python, Java, C, or C++**, and work through a short debugging exercise in the
+browser. AM generates the exercise and progressive hints; code execution and
+test comparisons grade your solution.
 
-![Editor and saved practice](docs/screenshots/exercise.png)
+![AM browser editor beside an exercise, a progressive hint, and a failing test with expected and actual returns](docs/screenshots/readme-practice.png)
 
-Existing controlled browser demo using regression fixtures, not live inference.
-Production sessions always use AI generation.
+*Controlled demo of the running application. The exercise, runtime availability,
+test results, and activity shown in this README use regression fixtures, not
+live Ollama inference or Docker execution. Production sessions always use the
+AI preparation pipeline.*
 
-## Quick start
+## Why I built AM
 
-From the repository, with the existing model and runner images installed:
+I'm studying computer science at George Mason University. I kept losing time to
+doomscrolling and wanted to turn some of it into something useful for my degree.
+After hearing endless jokes about AI replacing programmers, I thought: why not
+make AI teach me instead?
+
+As a junior, I wanted practice that could follow what I was studying. AM lets me
+bring a topic or an excerpt from my coursework, pick a language, and practice
+finding and fixing mistakes. Other students can bring their own material in the
+same way; the app is not tied to my classes or a fixed question list.
+
+Duolingo and Strava inspired the daily goals and streaks. Seeing progress gives
+me a reason to come back and record another session. Open WebUI inspired the
+flexibility of the practice inputs: sometimes I have notes, sometimes an article,
+and sometimes just a topic. It is design inspiration, not a dependency of the
+practice website. An existing Open WebUI installation can run separately.
+
+I also wanted to find out what my own computer could do with a local model and
+explore a practical balance between model capability, memory use, and waiting
+for a useful exercise.
+
+## What you can practice
+
+- **Four languages:** Python, Java, C, and C++, including bounded linked-list,
+  tree, and graph inputs. Native languages need the compiler runtime installed.
+- **Your material:** pasted or uploaded text, Markdown, code, and text-based PDFs.
+  Long notes use local passage retrieval. You can also enter just a topic without
+  notes; a completely blank request is not supported.
+- **Optional internet context:** retrieve up to three Wikipedia article excerpts
+  for your topic. Only the topic is sent to Wikipedia. This is separate from
+  pasting/uploading article text; AM does not fetch arbitrary URLs or crawl sites.
+- **Debugging with guidance:** generated buggy starters, progressive hints,
+  expected/actual test evidence, and a session summary.
+- **A browser coding workspace:** syntax highlighting, line numbers, indentation,
+  local draft autosave, and resumable sessions.
+- **A reason to return:** daily goals, completion-based streaks, topic paths,
+  practice history, and scheduled review prompts. Due topics generate new
+  exercises through the same AI pipeline.
+
+Sessions, drafts, and activity are saved in a local SQLite database. Export and
+delete controls are available on the dashboard. See [saved learning and
+privacy](docs/saved-learning.md) for what is retained.
+
+## A session with AM
+
+**Choose the focus.** Pick a language, topic, difficulty, and one to five
+exercises. Notes are optional when you have a topic. The internet checkbox is
+off by default; retrieved article links and excerpts appear with the exercise.
+
+![Practice setup with all four language options, a recursion topic, sample notes, difficulty, session length, and optional internet references](docs/screenshots/readme-setup.png)
+
+**Let AM cook up the next problem.** Circuit pulses travel toward the AM logo
+and its glow changes while a request is active. The loop below records the real
+CSS animation, with a development fixture holding generation open. It is a
+loading animation, not a view into the model's reasoning or a latency benchmark.
+The application keeps the animation static when reduced motion is requested.
+
+![Animated green circuit pulses converging on the glowing AM logo during the loading state](docs/media/am-generation-loading.gif)
+
+*12-second loop, 10 frames per second, 960 × 352 pixels, about 708 KiB. The crop
+shows the logo and circuit animation; the full page also displays preparation
+status text.*
+
+**Find the bug, then inspect the evidence.** The opening screenshot shows the
+first revealed hint and a failing case. After editing, run the tests again to
+compare expected and actual returns. These are the demo's passing results:
+
+<details>
+<summary>See passing results and the session summary</summary>
+
+![Corrected sample code and six passing fixture-backed test results in the browser editor](docs/screenshots/readme-results.png)
+
+The summary records the latest test outcome for each exercise.
+
+![Session summary showing one completed exercise and its two attempts](docs/screenshots/readme-summary.png)
+
+</details>
+
+**Return later.** The dashboard below follows one completed demo exercise and
+another saved, unfinished session. Its one-day streak comes from that
+fixture-backed workflow, not a claimed record of real study activity.
+
+![Dashboard showing a daily goal of two, one completion, a one-day streak, a saved session, review area, and recent practice](docs/screenshots/readme-dashboard.png)
+
+### Why AM looks and sounds like this
+
+AM's character is a playful adaptation of the machine in Harlan Ellison's
+*I Have No Mouth, and I Must Scream*: a sarcastic instructor willing to teach
+humanity while remaining deeply unimpressed by it.
+
+My first visual idea was an angry red computer. I chose green and a more
+approachable educational interface because this version of AM is here to help
+people learn. The greeting, “Welcome, human. Make yourself useful,” sets the
+voice, while the circuits make AM feel present as the next problem is prepared.
+The prompts keep explanations useful and encouraging beneath the sarcasm;
+personality stays out of executable code, test data, and comparisons.
+
+## How it works
+
+The browser talks to a local Python HTTP server. Ollama supplies inference,
+SQLite stores study progress, and restricted Docker containers execute code.
+The application backend uses Python's standard library; the website has no
+frontend build step. Open WebUI is not required.
+
+Before publishing an exercise, AM runs this preparation pipeline:
+
+1. **Generate structured output.** The model drafts the task, typed interface,
+   buggy starter, reference solution, hints, and tests from the chosen context.
+2. **Review in a separate call.** A blind reviewer sees the task and learning
+   context without the author's reference solution or test cases, then derives
+   its own solution and cases. By default, this is the same model called again.
+3. **Check both references.** Both solutions must pass the combined author and
+   reviewer cases under the execution limits.
+4. **Check the starter.** It must expose a failing result on the checked cases
+   while avoiding crashes and resource-limit failures.
+5. **Repair or reject.** Bounded model calls can repair malformed native tests,
+   review inconsistencies, or starter code and hints. A repaired starter must
+   still have a bug and receive a fresh blind review. Unresolved drafts are rejected.
+
+Student submissions then run in Docker and are graded by deterministic return
+value and input-mutation comparisons. The browser editor collects the code; it
+does not verify correctness, and the model does not decide whether you passed.
+There is no bundled question bank or template fallback.
+
+Tests and model agreement provide evidence, not proof that an exercise is
+correct for every valid input. Docker uses resource limits, restricted users,
+no container network access, and cleanup controls, but it is not a guarantee of
+perfect security or full isolation. See the [validation pipeline and
+boundaries](docs/verification.md) for the exact checks and repair limits.
+
+### Engineering challenges
+
+| Challenge | What AM implements |
+| --- | --- |
+| Connecting a local LLM to a usable exercise flow | Ollama requests with explicit context/output budgets, structured schemas, task prompts, and cancellation support |
+| Inconsistent generated code and test data | JSON/type/signature checks, combined reference execution, bounded model repairs, and rejection instead of a fixed fallback |
+| Executing four languages | Restricted Docker runners, trusted function wrappers, host-side comparisons, and native compilation inside the container |
+| Recovering a study session | SQLite persistence, versioned draft saves, resume after restart, and preservation of extra metadata from older builds |
+| Building the study interface | A browser editor, progressive hints, visible test evidence, saved activity, and responsive layouts |
+| Working within local hardware limits | Bounded notes retrieval, context/output limits, small test sets, model unloading, and diagnostics for rejected or slow preparation |
+
+These are the concrete areas the project has let me practice, rather than a
+claim that the model or validation pipeline is finished. The [project
+map](docs/project-map.md) connects these responsibilities to the source files.
+
+## AI model
+
+The default **base model** is `gpt-oss:20b`. The website actually requests the
+Ollama **alias** `am-study:latest`. Creating that alias with
+[`infrastructure/Modelfile`](infrastructure/Modelfile) applies a
+32,768-token context setting to the existing base model. It does not train or
+fine-tune the model. Application system prompts supply AM's teaching voice.
+
+| Setting | Current implementation |
+| --- | --- |
+| Model defaults | `am_core.py`: `gpt-oss:20b` base/chat default, `am-study:latest` practice default |
+| Author and author repair | Model selected by `python am.py on --model ...` |
+| Review and review repair | Same model by default; optionally select `--review-model ...` |
+| Practice requests | `ai_exercises.py`: 32,768 context tokens, up to 8,000 output tokens, temperature 0.2, `think: low`, fresh request seeds |
+| Startup context | `site_control.py` also requests 32,768 tokens; runtime options override Modelfile defaults |
+| Optional terminal chat | `chat.py`: separate defaults of 8,192 context tokens and 1,500 output tokens |
+
+The browser's **AI model settings** show the configured author/reviewer names
+and label an unverified base identity unknown. Startup reports installed model
+family and parameter metadata. An alias name or model family alone does not
+verify which base model an installation uses.
+
+### My development setup
+
+- AMD Radeon RX 9070 XT with 16 GB VRAM
+- AMD Ryzen 7 9700X
+- 32 GB system RAM
+
+This is the computer I develop on, not a minimum requirement, a proven optimal
+configuration, or a performance guarantee. Model choice, context size, and
+hardware affect memory use, latency, exercise quality, and rejection rates.
+Larger parameter counts alone do not guarantee better results.
+
+## Installation and first exercise
+
+Requirements: **Linux, Python 3.10+, Ollama, and Docker**. AM does not
+automatically download models or runner images. From a new checkout:
 
 ```bash
-python am.py on --diagnostics
+git clone https://github.com/Ejozef13/AM.git
+cd AM
 ```
 
-Open **http://127.0.0.1:8090**. Keep the terminal open. Start with one exercise.
-Press **Ctrl+C** to stop, or use another terminal:
-
-```bash
-python am.py off
-python am.py status
-```
-
-The launch terminal remains open while you study. Managed startup maintains
-Docker authorization during normal use; [renewal after sleep](docs/docker-access.md)
-happens there without restarting the app.
-
-Stopping cancels active work, cleans up containers, and unloads the selected
-models. Shared Ollama and Docker services remain available. Practice sessions
-and editor drafts are saved locally in SQLite. Wait for the draft-save status
-before closing. Resume unfinished sessions from the dashboard after restarting.
-Stop any older `practice_web.py` launch before switching to the managed commands.
-
-## Setup
-
-Requirements: **Linux, Python 3.10+, Ollama, and Docker**. Application code uses
-Python's standard library. The default model is `am-study:latest`, configured
-from `gpt-oss:20b` with a 32,768-token context in
-[`infrastructure/Modelfile`](infrastructure/Modelfile). Startup reports installed
-model metadata. No models are downloaded automatically.
-
-Start Ollama and obtain the default base model, then create the alias:
+Start the existing Ollama service, obtain the default base, and create the alias:
 
 ```bash
 python am.py model-on
@@ -58,7 +210,7 @@ ollama pull gpt-oss:20b
 ollama create am-study -f infrastructure/Modelfile
 ```
 
-For first-time runner setup:
+Prepare Docker and the runners. This block uses Bash:
 
 ```bash
 sudo systemctl start docker
@@ -69,55 +221,39 @@ python tools/check_runner_runtime.py
 python tools/setup_compiled_runtime.py
 ```
 
-The pin is already tracked; do not use `--pin` to overwrite it.
-The Python image listed in `infrastructure/python-runner-image.txt` must be
-available locally. See [runtime setup](docs/multilanguage-practice.md) for compiler
-options and limits. Existing installations do not need a rebuild for frontend edits.
+The Python image pin is already tracked; `--pin` creates a new pin and should
+not be used to overwrite it. Compiled setup builds and probes the Java/C/C++
+runtime. Python remains available if the compiled runtime is not installed.
+See [runtime setup](docs/multilanguage-practice.md) for compiler options and limits.
+For PDF notes, install Poppler (`sudo apt install poppler-utils`, or
+`sudo pacman -S poppler` on Arch).
 
-## Saved learning and notes
+Launch AM and open **http://127.0.0.1:8090**:
 
-The dashboard shows saved sessions, a daily goal, real completion history/streaks,
-learning-path topics, and due reviews. The editor has local syntax highlighting,
-line numbers, indentation, and autosave. Export/delete controls manage the local
-study profile in Git-ignored `.am-data/`.
+```bash
+python am.py on --diagnostics
+```
 
-Text/Markdown/code notes and text-based PDFs are accepted. Install Poppler for PDF
-extraction (`sudo apt install poppler-utils`, or `sudo pacman -S poppler` on Arch).
-Long notes use local passage retrieval and visible source references. No cloud AI API, vector service, or additional AI model is required.
+Keep the terminal open. Choose a language, enter a topic or notes, and start with
+one introductory exercise. Reveal hints as needed, edit the starter, and run the
+tests. Wait for **Draft saved on this computer** before closing a session.
 
-Paste/upload article text, or enable **Consult internet reference articles** to
-retrieve up to three Wikipedia excerpts using your topic. Only the topic goes
-to Wikipedia; notes and code stay local. Sources and links appear with the exercise.
-The option is off by default. Retrieval failure is explicit: retry or turn it off
-to use notes alone. Arbitrary URL fetching and general web crawling are not supported.
-See [notes and internet context](docs/notes-and-retrieval.md).
+Stop with **Ctrl+C**, or use another terminal:
 
-## AI model
+```bash
+python am.py off
+python am.py status
+```
 
-The default **base model** is `gpt-oss:20b`. The website actually requests the
-Ollama **alias** `am-study:latest`. `ollama create am-study -f infrastructure/Modelfile`
-creates that alias from the base with `PARAMETER num_ctx 32768`. This configures
-an existing model; AM does not train or fine-tune it. The Modelfile contains no
-persona prompt. Application system prompts supply the teaching personality.
+Managed startup refreshes Docker authorization; password renewal after sleep
+happens in the launch terminal. Stopping cleans up active work and unloads the
+selected models while leaving shared services and saved study data in place.
+See [Docker access](docs/docker-access.md) and [desktop commands](docs/desktop-commands.md).
 
-`am_core.py` defines defaults. `am.py on --model` selects the author model;
-`--review-model` selects the reviewer and defaults to the author model. Author
-repair uses the author; review repair and expected-value correction use the
-reviewer. The default is separate calls to the same model, not independent models.
-`ai_exercises.py` requests 32,768 context tokens, at most 8,000 output tokens,
-temperature 0.2, a fresh request seed, and `think: low`; startup in `site_control.py` also requests
-32,768 context tokens. These runtime context settings override model defaults.
-The browser's AI model settings show configured names and label unverified base
-identity unknown. Terminal startup reports actual installed family and parameter
-metadata; family alone does not verify a base model's name.
+## Using another Ollama model
 
-Optional terminal chat defaults to `gpt-oss:20b`, separately from practice, with
-8,192 context tokens and 1,500 output tokens. Open WebUI selects its own model.
-
-## Using another model
-
-Install your chosen Ollama-compatible model first. `YOUR_MODEL_NAME` is a
-placeholder for its exact installed tag, as listed by `ollama list`:
+Install your chosen model first. Replace `YOUR_MODEL_NAME` below with its exact
+installed tag:
 
 ```bash
 ollama list
@@ -125,116 +261,72 @@ ollama show YOUR_MODEL_NAME
 python am.py on --model YOUR_MODEL_NAME --diagnostics
 ```
 
-To use a distinct installed reviewer, add `--review-model YOUR_REVIEW_MODEL_NAME`.
-Otherwise generation, review, and their repairs all use `YOUR_MODEL_NAME`.
-For optional chat, select it separately:
+For a distinct installed reviewer:
+
+```bash
+python am.py on --model YOUR_MODEL_NAME --review-model YOUR_REVIEW_MODEL_NAME --diagnostics
+```
+
+Without `--review-model`, generation, review, and their repairs use the selected
+model in separate calls. `python am.py chat` opens default terminal chat.
+To configure that optional path separately:
 
 ```bash
 python chat.py --model YOUR_MODEL_NAME --context 8192 --output 1500
 ```
 
-Alternative models must support Ollama's structured JSON schema output, the
-current `think: low` request, AM's language contracts, and the configured context
-and execution limits. Practice currently requests 32,768 tokens; use a model and
-hardware capable of that setting. To change practice context/output/temperature,
-edit the runtime options in `ai_exercises.py` and keep startup context in
-`site_control.py` consistent; changing only the Modelfile does not override them.
-No separate repair model setting is needed. Larger parameter counts alone do not
-guarantee better results. Hardware and model choice affect latency, memory,
-exercise quality, and rejection rates; results will differ.
+Alternative models must support Ollama structured schema output, the current
+`think: low` request, AM's language contracts, and its context/execution limits.
+Practice currently requests 32,768 context tokens. Change runtime options in
+`ai_exercises.py` and keep startup context in `site_control.py` consistent if
+adjusting that budget; editing only the Modelfile does not override runtime options.
+An independent Open WebUI installation uses its own model picker.
 
-## If the first exercise fails
+## Limitations and troubleshooting
 
-A responding website and a loaded model do not establish that a generated
-exercise passed preparation. The screenshot's “could not verify a fresh exercise”
-message describes a preparation failure, not its specific cause. Expand any
-Preparation details and reproduce with:
+- Generation can be slow or rejected even after the website loads successfully.
+  Start with one exercise, avoid concurrent model use, and inspect the rejection
+  reason. Different models and hardware will not produce identical results.
+- Models can share misconceptions and miss edge cases. Passing generated tests
+  is not a proof of correctness or a calibrated measure of learning.
+- Optional Wikipedia context depends on network access and article relevance.
+  If retrieval fails, AM reports it; retry or disable the option to use notes.
+  Scanned PDFs need OCR before upload. [Input details](docs/notes-and-retrieval.md).
+- This is a local study app, not a public service for hosting hostile code.
+  Saved data is not encrypted. [Privacy and persistence](docs/saved-learning.md).
 
-```bash
-python am.py on --diagnostics
-```
+### If the first exercise fails
 
-Stop an existing managed launch with Ctrl+C first. Start with one introductory
-exercise and a narrow topic. The browser reports the failed check; the launch
-terminal reports rejection details. Opt-in `.am-diagnostics/last-generation.json`
-contains bounded rejected drafts/reviews and can include private note excerpts;
-inspect it before sharing. Do not bypass validation to force a session through.
+For preparation failures, stop an existing launch, restart with
+`python am.py on --diagnostics`, and reproduce the request. The browser and
+launch terminal report errors; `.am-diagnostics/last-generation.json` records
+bounded rejected artifacts, seeds, and reference context. It can include private
+note excerpts, so inspect it before sharing. Saved progress lives separately in
+Git-ignored `.am-data/`; runtime pins and locks live in `.am-runtime/`.
 
-- Missing model: check `ollama list` and `ollama show am-study:latest`; obtain the
-  base and create the alias with the setup commands above, or select an installed tag.
-- Ollama unavailable: `python am.py model-on`, then `python am.py model-status`.
-  `AM_OLLAMA_URL` accepts only local HTTP addresses (default port 11434).
-- Malformed/incomplete JSON or rejected code/tests: inspect the exact rejection
-  and token-limit metadata in diagnostics. Repairs are bounded; incompatible
-  structured output or language contracts can require another model or a prompt fix.
-- Slow/failed generation: preparation includes several model calls and Docker
-  runs. Check `ollama ps`, avoid simultaneous WebUI inference, try one exercise,
-  and inspect timeout/output-limit evidence. There is no guaranteed latency.
-- Runner unavailable: run `sudo -v`, `python tools/check_runner_runtime.py`, and
-  `python tools/setup_compiled_runtime.py --use-existing-image` if the compiled
-  image is installed. See the runtime guide for first-time builds and access renewal.
+For a missing model, check `ollama list` and `ollama show am-study:latest`, then
+use the setup commands above. For an unavailable service, use
+`python am.py model-on` and `python am.py model-status`. `AM_OLLAMA_URL` accepts
+only local HTTP addresses, defaulting to `http://127.0.0.1:11434`. For runner
+issues, use `sudo -v` and `python tools/check_runner_runtime.py`; an installed
+compiled image can be reprobed with
+`python tools/setup_compiled_runtime.py --use-existing-image`.
 
-Saved notes, drafts, and settings survive preparation rejection. No fixed question
-fallback is served.
+## Guides and development
 
-## Customize the app
-
-| Change | Edit |
-| --- | --- |
-| Colors, fonts, spacing, mobile layout | [`web/app.css`](web/app.css) |
-| Page headings, labels, buttons, structure | [`web/index.html`](web/index.html) |
-| Dynamic session text, hints UI, results | [`web/app.js`](web/app.js) |
-| Highlighting and editor behavior | [`web/editor.js`](web/editor.js) |
-| Dashboard, paths, goals, review UI | [`web/study.js`](web/study.js) |
-| Learning-path topic lists | [`learning_paths.py`](learning_paths.py) |
-| AI instructions, review, repair | [`ai_exercises.py`](ai_exercises.py) |
-| Supported function types | [`language_contracts.py`](language_contracts.py) |
-
-Frontend changes need a browser refresh. Backend changes need an app restart.
-The [project map](docs/project-map.md) explains every module and the request flow.
-
-## How it works
-
-The local model drafts a question, buggy starter, reference, hints, and tests.
-A separate blind review derives another solution and test set. Both references
-must pass the combined cases, and the starter must show a wrong answer without
-crashing on the checked inputs. Student grading uses execution and comparisons;
-AI does not decide whether a submission passed. The browser editor is an input
-tool; execution and deterministic comparisons perform grading.
-
-New requests ask for 3–5 small cases per call and use typed native contracts.
-Failed drafts receive bounded model-only repairs, including native test-shape
-repair and starter/hint repair with a fresh blind review. Correct starters with no
-remaining bug are rejected. AM never inserts a host-written exercise or bug. Model agreement and passing tests are
-useful evidence, not proof of correctness. Docker restrictions reduce risk;
-they do not guarantee perfect security or a fully isolated sandbox. Optional internet context uses Wikipedia; no embedding service is enabled. Long notes use bounded local
-lexical retrieval before generation.
-Bounded linked-list, tree, and graph inputs are supported across all four
-languages; see the structured-input guide for calling conventions and limits.
-
-Every practice session is AI-generated. There is no bundled question bank,
-prewritten exercise generator, or offline/template fallback. Run tests and hints
-only within a generated session. Fixed examples in `tests/` simulate model and
-runner responses for regression checks; the app never serves them as questions.
-
-`am.py chat` is optional terminal chat. Open WebUI remains independent of the
-practice website.
-
-## Guides
-
-- [Docker authorization and all-day practice](docs/docker-access.md)
-- [Desktop start/stop commands and independent Open WebUI](docs/desktop-commands.md)
-- [Project map and editing guide](docs/project-map.md)
-- [Saved learning and privacy](docs/saved-learning.md)
+- [Project map and interface editing guide](docs/project-map.md)
+- [Generation, review, repair, and execution boundaries](docs/verification.md)
+- [Java/C/C++ setup and runtime limits](docs/multilanguage-practice.md)
 - [Structured inputs](docs/structured-inputs.md)
-- [PDF notes and retrieval](docs/notes-and-retrieval.md)
-- [Validation, demo, and live benchmark](docs/validation.md)
-- [Release status and roadmap](docs/roadmap.md)
-- [Generation, review, and accuracy limitations](docs/verification.md)
-- [Java/C/C++ setup](docs/multilanguage-practice.md)
-- [Open WebUI configuration](docs/open-webui.md)
+- [Notes, PDFs, and optional internet context](docs/notes-and-retrieval.md)
+- [Saved learning and privacy](docs/saved-learning.md)
+- [Docker authorization and all-day practice](docs/docker-access.md)
+- [Desktop start/stop commands](docs/desktop-commands.md)
+- [Independent Open WebUI configuration](docs/open-webui.md)
+- [Validation, demo capture, and live benchmark](docs/validation.md)
+- [Release status and future ideas](docs/roadmap.md)
 
-## Development checks
+Application checks:
 
 ```bash
 python -m unittest discover -s tests -v
@@ -243,11 +335,6 @@ node --check web/editor.js
 node --check web/study.js
 ```
 
-Default tests use controlled model/service fixtures. Optional real Docker checks
-are documented in the runtime guides. Keep tests and validation tools with the
-source: they protect the execution boundary and generation contracts.
-
-Diagnostics save rejected drafts to Git-ignored `.am-diagnostics/`; inspect them
-before sharing. Runtime pins and locks stay in `.am-runtime/`. Existing private
-configuration, model storage, archived local files, and Open WebUI data are not
-removed by repository cleanup.
+Default checks use controlled fixtures; they are not live model measurements.
+The [validation guide](docs/validation.md#readme-walkthrough-capture) explains how
+to reproduce these screenshots and the GIF with the separate capture helper.

@@ -51,6 +51,43 @@ Outputs go to ignored `benchmark-results/browser/`. The workflow in
 checks, and this browser test, uploading screenshots/video as a CI artifact.
 Remote CI status must be checked on GitHub; configuring it is not proof it ran.
 
+## README walkthrough capture
+
+The current README media was captured from the running application with
+`tools/capture_readme_demo.py`. This is a separate development helper that imports
+existing regression model/runner fixtures; it does not alter production behavior
+or require Ollama, Docker execution, or private study data. All four runtime
+availability flags are provided by controlled runners. The temporary SQLite
+profile starts empty. The helper uses actual UI actions to reveal a hint, run a
+failing starter, submit a passing fixture solution, open the summary, and save a
+second unfinished session. The displayed one-day streak and history are produced
+by that workflow, with no seeded completion history or clock changes.
+
+With the optional Playwright dependency, Chromium, and a system `ffmpeg` binary
+installed, reproduce the captures from the repository root:
+
+```bash
+python tools/capture_readme_demo.py
+```
+
+Use `--output /tmp/am-readme-demo` to inspect fresh captures without replacing
+tracked assets. The helper records five PNGs in `docs/screenshots/readme-*.png`
+and `docs/media/am-generation-loading.gif`. Earlier screenshots and `demo.webm`
+above are retained as historical controlled-demo assets.
+
+The GIF records the unchanged browser CSS while a controlled generation request
+is held open. Circuit pulses have a three-second period during work; the
+alternating logo glow has a four-second period. A twelve-second recording covers
+both full cycles at ten frames per second. The GIF is 960 × 352 pixels and about
+708 KiB. Its crop includes the logo, circuits, and greeting; preparation status
+text is elsewhere on the full page. It indicates an active request, not literal
+model reasoning, generation speed, or a measured inference run. The production
+page respects reduced-motion preferences. ffmpeg encodes the browser screenshots;
+no decorative frames or model behavior are invented.
+
+No live Ollama model was available for these captures. This controlled workflow
+cannot establish generation quality, container security, or desktop latency.
+
 ## Live GPT-OSS measurements
 
 Live model measurements must be made against the installed desktop model.
