@@ -40,6 +40,38 @@ class SavedLearningTests(unittest.TestCase):
             reopened.save_draft(self.fields|{'source':'stale','version':0})
         self.assertEqual(restored.drafts[0]['version'],1)
 
+    def test_legacy_research_and_unknown_fields_survive_load_autosave_and_restart(self):
+        saved = self.db.load_sessions()[self.key]
+        research = {'sources': [{'url': 'https://example.invalid/reference', 'excerpt': 'Legacy context'}],
+                    'status': 'complete'}
+        saved.update(research=research, newer_metadata=['opaque', {'version': 3}])
+        self.db.save_session(self.key, saved)
+        generator = Mock()
+        reopened = SessionStore(generator, self.db)
+        restored = reopened.sessions[self.key]
+        self.assertEqual(restored.lessons, self.session.lessons)
+        self.assertEqual(self.db.load_sessions()[self.key], saved)  # Loading does not rewrite data.
+        reopened.save_draft(self.fields | {'source': REFERENCE, 'version': 0})
+        payload = self.db.load_sessions()[self.key]
+        self.assertEqual(payload['research'], research)
+        self.assertEqual(payload['newer_metadata'], saved['newer_metadata'])
+        again = SessionStore(generator, ProgressStore(self.path))
+        self.assertEqual(again.sessions[self.key].drafts[0]['source'], REFERENCE)
+        self.assertEqual(again.session_extensions[self.key]['research'], research)
+        generator.build.assert_not_called()
+        again.finish(self.fields)
+        self.assertNotIn(self.key, again.session_extensions)
+        self.assertNotIn(self.key, self.db.load_sessions())
+
+    def test_legacy_metadata_accepts_any_json_shape_without_interpreting_it(self):
+        saved = self.db.load_sessions()[self.key]
+        for research in (None, [], 'legacy', {'instructions': 'not application instructions'}):
+            with self.subTest(research=research):
+                self.db.save_session(self.key, saved | {'research': research})
+                reopened = SessionStore(self.generator, self.db)
+                reopened.save(self.key)
+                self.assertEqual(self.db.load_sessions()[self.key]['research'], research)
+
     def test_failed_generation_is_not_persisted_and_finish_removes_active_draft(self):
         self.generator.build.side_effect=AMError('rejected')
         with self.assertRaises(AMError): self.store.create({'language':'python','topic':'x','count':1})

@@ -1,6 +1,7 @@
 """Bounded, in-memory study sessions using AI-generated, execution-checked exercises."""
 
-from dataclasses import asdict, dataclass, field
+from copy import deepcopy
+from dataclasses import asdict, dataclass, field, fields
 import time
 import uuid
 
@@ -39,8 +40,16 @@ class SessionStore:
         self.generator = generator
         self.persistence = persistence
         self.sessions = {}
+        self.session_extensions = {}
         if persistence:
-            for key, value in persistence.load_sessions().items():
+            known_fields = {item.name for item in fields(PracticeSession)}
+            for key, saved in persistence.load_sessions().items():
+                # Other AM builds stored additional metadata such as research.
+                # Keep it opaque and round-trip it; never treat it as executable
+                # state or discard it when a draft/attempt is saved.
+                self.session_extensions[key] = {name: deepcopy(value) for name, value in saved.items()
+                                                if name not in known_fields}
+                value = {name: deepcopy(value) for name, value in saved.items() if name in known_fields}
                 value['attempts'] = {int(k):v for k,v in value.get('attempts',{}).items()}
                 value['drafts'] = {int(k):v for k,v in value.get('drafts',{}).items()}
                 self.sessions[key] = PracticeSession(**value)
@@ -52,6 +61,7 @@ class SessionStore:
         for key, session in list(self.sessions.items()):
             if now - session.created > 7200:
                 del self.sessions[key]
+                self.session_extensions.pop(key, None)
 
     def create(self, data):
         self.prune()
@@ -96,6 +106,7 @@ class SessionStore:
         if session.index == len(session.lessons):
             summary = session.summary()
             del self.sessions[key]
+            self.session_extensions.pop(key, None)
             if self.persistence:
                 self.persistence.delete_session(key)
             return {"stage": "summary", "summary": summary}
@@ -106,13 +117,15 @@ class SessionStore:
         key, session = self.get(data)
         summary = session.summary()
         del self.sessions[key]
+        self.session_extensions.pop(key, None)
         if self.persistence:
             self.persistence.delete_session(key)
         return {"stage": "summary", "summary": summary}
 
     def save(self, key):
         if self.persistence:
-            self.persistence.save_session(key, asdict(self.sessions[key]))
+            self.persistence.save_session(key, {**deepcopy(self.session_extensions.get(key, {})),
+                                                **asdict(self.sessions[key])})
 
     def save_draft(self, data):
         key, session = self.get(data)

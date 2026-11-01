@@ -55,3 +55,11 @@ Open **Local data and privacy** on the dashboard:
 Export is a readable backup, not an import/migration format yet. For a complete
 filesystem backup, stop AM and copy the `.am-data/` folder. The app uses a private
 SQLite file and ordinary transactions; do not edit its JSON while AM is running.
+
+## Sessions from other AM builds
+
+Saved sessions may contain extra metadata such as `research` from another build.
+AM restores the known session fields and preserves unknown fields unchanged when
+saving drafts or attempts. That metadata is not executed or interpreted as
+instructions. Loading does not rewrite sessions or require clearing the database.
+Finishing/deleting a session removes its preserved metadata with the session.

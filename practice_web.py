@@ -228,6 +228,7 @@ def make_server(app, port=8090):
                     if app.persistence:
                         app.persistence.clear()
                     app.sessions.sessions.clear()
+                    app.sessions.session_extensions.clear()
                     status, payload = 200, {'cleared':True}
                 elif self.path == "/api/session":
                     app.progress = "Preparing your practice session…"
