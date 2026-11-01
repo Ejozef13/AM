@@ -6,7 +6,8 @@ into short debugging sessions in a built-in browser editor. Choose **Python, Jav
 fix a generated program, reveal hints, run tests, and review your session.
 AM runs locally with Ollama and grades code using restricted Docker execution.
 Progressive hints, saved sessions, daily goals, and streaks support regular practice.
-AM's character draws on Harlan Ellison's *I Have No Mouth, and I Must Scream*:
+The circuit background feeds the AM logo and brightens while requests run;
+reduced-motion preferences keep it static. AM's character draws on Harlan Ellison's *I Have No Mouth, and I Must Scream*:
 theatrical, sarcastic, and quietly invested in your progress. The sarcasm targets
 bugs and humanity's habits, never a student's intelligence or circumstances.
 
@@ -82,10 +83,14 @@ study profile in Git-ignored `.am-data/`.
 
 Text/Markdown/code notes and text-based PDFs are accepted. Install Poppler for PDF
 extraction (`sudo apt install poppler-utils`, or `sudo pacman -S poppler` on Arch).
-Long notes use local passage retrieval and visible source references. No cloud
-API, vector service, or additional AI model is required.
+Long notes use local passage retrieval and visible source references. No cloud AI API, vector service, or additional AI model is required.
 
-Articles must be pasted or uploaded as supported files; AM does not fetch URLs.
+Paste/upload article text, or enable **Consult internet reference articles** to
+retrieve up to three Wikipedia excerpts using your topic. Only the topic goes
+to Wikipedia; notes and code stay local. Sources and links appear with the exercise.
+The option is off by default. Retrieval failure is explicit: retry or turn it off
+to use notes alone. Arbitrary URL fetching and general web crawling are not supported.
+See [notes and internet context](docs/notes-and-retrieval.md).
 
 ## AI model
 
@@ -100,7 +105,7 @@ persona prompt. Application system prompts supply the teaching personality.
 repair uses the author; review repair and expected-value correction use the
 reviewer. The default is separate calls to the same model, not independent models.
 `ai_exercises.py` requests 32,768 context tokens, at most 8,000 output tokens,
-temperature 0.2, and `think: low`; startup in `site_control.py` also requests
+temperature 0.2, a fresh request seed, and `think: low`; startup in `site_control.py` also requests
 32,768 context tokens. These runtime context settings override model defaults.
 The browser's AI model settings show configured names and label unverified base
 identity unknown. Terminal startup reports actual installed family and parameter
@@ -198,9 +203,11 @@ AI does not decide whether a submission passed. The browser editor is an input
 tool; execution and deterministic comparisons perform grading.
 
 New requests ask for 3–5 small cases per call and use typed native contracts.
-Failed drafts receive bounded repairs. Model agreement and passing tests are
+Failed drafts receive bounded model-only repairs, including native test-shape
+repair and starter/hint repair with a fresh blind review. Correct starters with no
+remaining bug are rejected. AM never inserts a host-written exercise or bug. Model agreement and passing tests are
 useful evidence, not proof of correctness. Docker restrictions reduce risk;
-they do not guarantee perfect security or a fully isolated sandbox. No web search or embedding service is enabled. Long notes use bounded local
+they do not guarantee perfect security or a fully isolated sandbox. Optional internet context uses Wikipedia; no embedding service is enabled. Long notes use bounded local
 lexical retrieval before generation.
 Bounded linked-list, tree, and graph inputs are supported across all four
 languages; see the structured-input guide for calling conventions and limits.

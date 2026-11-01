@@ -3,7 +3,9 @@
 AM now stores generated sessions, selected note excerpts/citations, drafts,
 attempts, goals, and review schedules in `.am-data/progress.sqlite3`. This folder
 is ignored by Git. Set `AM_DATA_DIR` to use another local directory. It is one
-local student profile, not a multi-user account system. Data is not encrypted.
+local student profile, not a multi-user account system. Data is not encrypted. Optional internet reference URLs/excerpts are also saved
+with their session. Only an explicitly supplied topic is sent to Wikipedia when
+the internet checkbox is enabled; notes and code stay local.
 
 ## Resume
 

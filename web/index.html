@@ -7,9 +7,10 @@
 </head>
 <body>
   <main>
+    <svg id="am-circuits" class="am-circuits" aria-hidden="true" focusable="false"></svg>
     <header>
       <a class="brand" href="/" aria-label="AM practice home"><span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>AM<span class="brand-label">practice</span></a>
-      <span class="badge">LOCAL AI · YOUR NOTES · YOUR PACE</span>
+      <span class="badge">AM · LOCAL INTELLIGENCE</span>
     </header>
     <nav class="practice-path" aria-label="Practice session steps">
       <ol>
@@ -18,7 +19,7 @@
         <li data-step="summary"><span class="step-number" aria-hidden="true">3</span>Review your session</li>
       </ol>
     </nav>
-    <div class="intro"><p class="eyebrow" id="intro-eyebrow">MAKE THE NEXT FEW MINUTES COUNT</p><h1 id="intro-title">Humanity has bugs.<br>Let’s fix yours.</h1><p id="intro-description">Pick a language. Bring your notes. Build your debugging skills, one short challenge at a time.</p></div>
+    <div class="intro"><p class="eyebrow" id="intro-eyebrow">AM IS LISTENING</p><h1 id="intro-title">Welcome, human.<br>Make yourself useful.</h1><p id="intro-description">I have considered the future of your species. Start with a loop. Bring your notes; I will bring the scrutiny.</p></div>
     <section id="study-dashboard" class="card study-dashboard" hidden aria-labelledby="dashboard-title">
       <div class="section-top"><h2 id="dashboard-title">Your practice</h2><p id="study-stats" aria-live="polite">Loading saved activity…</p></div>
       <div class="goal-row"><label for="daily-goal">Daily exercise goal</label><input id="daily-goal" type="number" min="1" max="20" value="1"><button id="save-goal" class="secondary" type="button">Save goal</button></div>
@@ -26,10 +27,11 @@
       <h3>Due for review</h3><div id="review-queue" class="study-actions"></div>
       <details><summary>Learning paths · choose a topic</summary><div id="learning-paths"></div></details>
       <details><summary>Recent practice</summary><div id="practice-history"></div></details>
-      <details><summary>Local data and privacy</summary><p class="muted">Sessions, generated questions, notes excerpts, drafts, and activity are saved on this computer. Export includes that private content. Delete clears study records; exported files and optional diagnostic logs are separate.</p><div class="study-actions"><button id="export-data" class="secondary" type="button">Export study data</button><button id="delete-data" class="text-button" type="button">Delete saved study data</button></div></details>
+      <details><summary>Local data and privacy</summary><p class="muted">Sessions, generated questions, notes excerpts, retrieved references, drafts, and activity are saved on this computer. Only your topic is sent to Wikipedia if you enable internet references. Export includes that private content. Delete clears study records; exported files and optional diagnostic logs are separate.</p><div class="study-actions"><button id="export-data" class="secondary" type="button">Export study data</button><button id="delete-data" class="text-button" type="button">Delete saved study data</button></div></details>
     </section>
     <p id="error" role="alert" hidden></p>
-    <p id="loading" role="status" aria-live="polite">Loading practice options…</p>
+    <p id="loading" role="status" aria-live="polite">Establishing contact with AM…</p>
+    <p id="am-presence" class="am-presence" role="status" aria-live="polite">AM ONLINE · Awaiting your next questionable program.</p>
     <section id="setup" class="card setup-card" hidden aria-labelledby="setup-title">
       <div class="card-heading"><span class="eyebrow">YOUR NEXT CHALLENGE</span><h2 id="setup-title">What are we studying today?</h2><p class="muted">One exercise. Even humanity can start there.</p></div>
       <p class="field-label" id="language-label">Language</p><div id="languages" class="languages" role="group" aria-labelledby="language-label"></div><p id="runtime-setup" class="muted" hidden></p>
@@ -39,6 +41,8 @@
         <textarea id="notes" rows="6" maxlength="200000" placeholder="Paste the definitions, examples, or course excerpt you want to focus on."></textarea>
         <div class="upload-row"><label class="file-label" for="notes-file">Add a notes file</label><input id="notes-file" type="file" accept=".txt,.md,.markdown,.py,.java,.c,.cpp,.h,.hpp,.pdf"><span id="file-status" class="muted"></span></div>
         <p class="muted">Text, Markdown, code, or text-based PDF notes. Long notes are searched locally for relevant passages. Scanned PDFs need OCR. Uploaded code is context, not executed.</p>
+        <label class="web-option" for="use-web"><input id="use-web" type="checkbox"> Consult internet reference articles</label>
+        <p class="muted">Optional: send only your topic to Wikipedia for up to three article excerpts. Notes and code stay local. Retrieved sources appear with the exercise; articles can contain mistakes. If retrieval fails, you can turn this off and retry with notes.</p>
         <div class="setup-options"><div><label for="difficulty">Difficulty</label><select id="difficulty"><option value="introductory">Introductory</option><option value="standard" selected>Standard</option><option value="challenging">Challenging</option></select></div><div><label for="count">Session length</label><select id="count"><option value="1" selected>1 exercise</option><option value="2">2 exercises</option><option value="3">3 exercises</option><option value="4">4 exercises</option><option value="5">5 exercises</option></select></div></div>
         <div class="scope-note"><p class="eyebrow" id="mode-title">YOUR PRACTICE SESSION</p><p id="family-list"></p><p class="muted" id="mode-description"></p></div>
         <details><summary>AI model settings</summary><p id="model-status" class="muted"></p><p class="muted">Change models with the launch flags --model and --review-model. Base identity is unknown unless verified from the installed model; an alias name alone does not establish it.</p></details>
@@ -61,7 +65,7 @@
         <div id="editor-language" class="editor-label">Python · function submission</div>
         <textarea id="source" maxlength="16000" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="editor-help"></textarea>
         <p id="editor-help" class="muted">Tab inserts four spaces. Ctrl+Enter or ⌘+Enter runs tests. Drafts save locally after typing. Check the save status before closing.</p>
-        <p id="draft-status" class="muted" role="status">Draft not changed.</p><details id="retrieval-details" hidden><summary>Sources used for this question</summary><div id="retrieval-sources"></div></details>
+        <p id="draft-status" class="muted" role="status">Draft not changed.</p><details id="retrieval-details" hidden><summary>Reference context for this question</summary><div id="retrieval-sources"></div></details>
         <div class="run-bar"><button id="run" class="primary" type="button">Run tests <span aria-hidden="true">→</span></button><span id="activity" role="status" aria-live="polite"></span></div>
         <section id="results" hidden aria-labelledby="result-title"><h2 id="result-title"></h2><p id="result-note" class="muted"></p><div id="test-list"></div></section>
         <div class="next-row"><button id="next-exercise" class="secondary" type="button">Next exercise →</button><span class="muted">You can move on and see unfinished exercises in your summary.</span></div>

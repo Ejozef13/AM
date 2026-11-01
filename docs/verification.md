@@ -10,6 +10,7 @@ fallback. Fixed test fixtures are not accessible through the application.
 | --- | --- | --- |
 | Input | Validate language/runtime, difficulty, session length, topic, notes size | Missing input, unavailable compiler, invalid limits |
 | Context | Extract PDF text if uploaded; retrieve relevant passages from long notes | Invalid/scanned PDF, size bounds, no matching long-note passages |
+| Web context (optional) | Fetch bounded Wikipedia excerpts using only the topic; keep them separate from notes | Network failure, no usable articles, response size/shape limits |
 | Author | Local model writes task, constraints, starter bug, correct reference, hints, tests, and evidence ID | Incomplete or malformed response |
 | Structure | Parse JSON/code syntax; validate fields, types, signature, arguments, source bounds, and notes origin | Broken interface, invalid native types, invented excerpt ID |
 | Blind review | Separate model call sees task, notes, starter, and hints; derives another solution and cases | Ambiguous/irrelevant task, incorrect hints, invalid code/tests |
@@ -29,7 +30,16 @@ be reused within preparation; a changed expectation must be checked again.
 
 ## Bounded repairs
 
-- At most two author drafts per exercise.
+- At most two author drafts per exercise, with fresh random request seeds logged
+  in response diagnostics. Seeds encourage variation; they do not guarantee unique tasks.
+- Malformed native test shapes or out-of-range values get one model-only repair
+  using the exact signature schema. Only tests can change; source/task/signature
+  are preserved. All ordinary checks and reference execution still apply.
+- An invalid starter gets up to two model-only repair attempts for starter code
+  and hints. A candidate must pass safety checks, still fail a test, and receive
+  a fresh blind review of its bug and hints. A fully correct candidate is rejected
+  as a starter and that feedback reaches the next attempt. No host-written bug
+  or exercise is inserted. Infrastructure errors abort rather than trigger repair.
 - At most two reviewer attempts for an otherwise unchanged draft.
 - If both references agree with each other but disagree with a reviewer expected
   value, one bounded correction request checks that inconsistency against the
@@ -84,7 +94,7 @@ miss cases. Treat the observed evidence as the scope of the result.
 | Responsibility | File |
 | --- | --- |
 | Author/review/repair orchestration | `ai_exercises.py` |
-| Student input and note retrieval | `study_input.py`, `note_retrieval.py` |
+| Student input and note retrieval | `study_input.py`, `note_retrieval.py`, `web_retrieval.py` |
 | Source/JSON checks | `lesson_validation.py`, `language_contracts.py` |
 | Python/container transport and host comparison | `code_runner.py` |
 | Native compile/run and marshaling | `compiled_runner.py`, `compiled_driver.py`, `native_harness.py`, `native_structures.py` |

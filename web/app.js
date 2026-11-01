@@ -37,7 +37,9 @@ const labels = {compile_error: "Compiler error", passed: "Passed", failed: "Inco
 function showError(message = "") { $("error").textContent = message; $("error").hidden = !message; }
 function setBusy(value) {
   busy = value;
-  for (const id of ["run", "reset", "start", "sample", "next-exercise", "finish-session", "another-session", "notes-file", "difficulty", "count", "topic"]) $(id).disabled = value;
+  document.body.classList.toggle('am-working', value);
+  $("am-presence").textContent = value ? "AM THINKING · The circuits are occupied. Your progress is being considered." : "AM ONLINE · Awaiting your next questionable program.";
+  for (const id of ["run", "reset", "start", "sample", "next-exercise", "finish-session", "another-session", "notes-file", "difficulty", "count", "topic", "use-web"]) $(id).disabled = value;
   $("hint").disabled = value || !lesson || nextHint >= lesson.hint_count;
   $("source").readOnly = value; $("notes").readOnly = value;
   document.querySelectorAll('.language[data-available="true"]').forEach((button) => { button.disabled = value; });
@@ -110,7 +112,12 @@ function renderSession(view) {
   codeEditor.sync();
   $('retrieval-sources').replaceChildren();
   for(const citation of view.citations || []) {
-    addText($('retrieval-sources'),'h3',citation.source); addText($('retrieval-sources'),'blockquote',citation.excerpt);
+    addText($('retrieval-sources'),'h3',citation.source);
+    if (typeof citation.url === 'string' && citation.url.startsWith('https://en.wikipedia.org/wiki/')) {
+      const link = addText($('retrieval-sources'), 'a', 'Open reference article');
+      link.href = citation.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    }
+    addText($('retrieval-sources'),'blockquote',citation.excerpt);
   }
   $('retrieval-details').hidden=!(view.citations || []).length;
   $("focus-evidence").hidden = false; $("focus-evidence").open = false;
@@ -164,7 +171,7 @@ $("setup-form").addEventListener("submit", (event) => {
     }, 2000);
     try {
     const view = await post("/api/session", {language: selectedLanguage, topic: $("topic").value,
-      notes: $("notes").value, difficulty: $("difficulty").value, count: Number($("count").value)});
+      notes: $("notes").value, use_web: $("use-web").checked, difficulty: $("difficulty").value, count: Number($("count").value)});
     renderSession(view);
     if(typeof refreshDashboard === "function") refreshDashboard();
     } finally { clearInterval(timer); }
@@ -206,9 +213,9 @@ $("finish-session").addEventListener("click", () => {
   perform("Finishing your session…", async () => { await saveDraft(); renderSession(await post("/api/session/finish", sessionFields())); });
 });
 $("another-session").addEventListener("click", () => {
-  screen("setup"); if(typeof refreshDashboard === "function") refreshDashboard(); showError(); $("intro-eyebrow").textContent = "MAKE THE NEXT FEW MINUTES COUNT";
-  $("intro-title").textContent = "A little code. A little progress.";
-  $("intro-description").textContent = "Pick a language. Bring your notes. Build your debugging skills, one short challenge at a time.";
+  screen("setup"); if(typeof refreshDashboard === "function") refreshDashboard(); showError(); $("intro-eyebrow").textContent = "AM IS LISTENING";
+  $("intro-title").textContent = "Welcome, human. Make yourself useful.";
+  $("intro-description").textContent = "I have considered the future of your species. Start with a loop. Bring your notes; I will bring the scrutiny.";
 });
 $("notes-file").addEventListener("change", async () => {
   const file = $("notes-file").files[0]; if (!file) return;
@@ -254,7 +261,7 @@ fetch("/api/setup").then(async (response) => {
   }
   $("mode-title").textContent = "AI-GENERATED PRACTICE";
   $("family-list").textContent = "Questions built around your topic and notes";
-  $("mode-description").textContent = "AM drafts a debugging question. A separate review solves it independently, then both solutions must pass the combined tests. Start with one exercise. Notes guide the question; web research is not enabled.";
+  $("mode-description").textContent = "AM drafts a debugging question. A separate review solves it independently, then both solutions must pass the combined tests. Start with one exercise. Notes guide the question; Optional internet references retrieve Wikipedia excerpts using only your topic; notes and code stay local.";
   const missingRuntime = setup.mode === "ai-generated" && setup.languages.some((language) => !language.available);
   $("runtime-setup").hidden = !missingRuntime;
   $("runtime-setup").textContent = missingRuntime ? "To enable Java, C, and C++: run sudo -v, then python tools/setup_compiled_runtime.py in your terminal, and restart this app." : "";
@@ -265,3 +272,30 @@ fetch("/api/setup").then(async (response) => {
 window.addEventListener('beforeunload',event=>{
   if(session && $('source').value!==savedSource) { event.preventDefault(); event.returnValue=''; }
 });
+
+// Decorative traces converge on the actual logo, including at mobile widths.
+function drawCircuits() {
+  const svg = $("am-circuits");
+  const main = svg.parentElement.getBoundingClientRect();
+  const logo = document.querySelector('.brand-mark').getBoundingClientRect();
+  const width = main.width, height = 1300;
+  const x = logo.left - main.left + logo.width / 2;
+  const y = logo.top - main.top + logo.height / 2;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.replaceChildren();
+  for (let i = 0; i < 9; i++) {
+    const startX = width + 30;
+    const startY = 170 + i * 128;
+    const bendX = Math.max(x + 30, width - 38 - i * width * .055);
+    const laneY = y + 55 + i * 13;
+    const d = `M ${startX} ${startY} H ${bendX} V ${laneY + 35} L ${bendX - 35} ${laneY} H ${x + 20 + i * 7} L ${x} ${y}`;
+    for (const kind of ['trace', 'pulse']) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d); path.setAttribute('class', kind);
+      path.setAttribute('pathLength', '100'); path.style.animationDelay = `${i * -.43}s`;
+      svg.append(path);
+    }
+  }
+}
+drawCircuits();
+window.addEventListener('resize', drawCircuits);

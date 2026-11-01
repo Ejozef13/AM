@@ -6,6 +6,7 @@ import uuid
 
 from study_input import study_input
 from note_retrieval import retrieve
+from web_retrieval import search_references
 
 
 @dataclass
@@ -60,9 +61,14 @@ class SessionStore:
         topic, notes, count, difficulty = study_input(data, allowed)
         generator = self.generator.for_language(data['language']) if hasattr(self.generator, 'for_language') else self.generator
         context, citations = retrieve(topic, notes)
+        web_sources = []
+        if data.get('use_web', False):
+            generator.progress('AM is retrieving internet reference articles…')
+            web_sources = search_references(topic, getattr(generator, 'cancel_event', None))
+        generator.web_sources = web_sources
         lessons, plan, label = generator.build(topic, context, difficulty, count)
         key, session = self.publish(lessons, plan, label)
-        session.citations, session.topic = citations, topic or plan['focus']
+        session.citations, session.topic = citations + web_sources, topic or plan['focus']
         self.save(key)
         return key, session
 

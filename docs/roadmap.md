@@ -8,6 +8,7 @@
 - Bounded linked-list, heap-indexed tree, and adjacency-graph inputs in Python,
   Java, C, and C++, with mutation checks and restricted execution.
 - Text-based PDF extraction and local lexical retrieval for longer notes.
+- Optional bounded Wikipedia reference excerpts with visible provenance; no arbitrary URL fetching.
 - A repeatable browser demo, screenshots/video, GitHub Actions regression/browser
   configuration, and a live-model benchmark tool.
 

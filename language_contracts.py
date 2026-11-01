@@ -139,7 +139,10 @@ def language_instruction(language):
     shape = {
         'java':'Submit public class Solution with a public static solve method; no package or main. Use String and int[]. ',
         'c':'Submit a free solve function without main. int_array expands to const int *argN, int argN_len. '
-            'The runner supplies lengths: never include them as extra JSON arguments. string is const char *. No array returns. ',
+            'The runner supplies lengths: never include them as extra JSON arguments or append a length to array contents. '
+            'Never wrap array values in objects containing arg0 or arg0_len. An empty int_array is args=[[]], '
+            'not args=[[0,0]]. Array length is transport metadata, never an element. '
+            'string is const char *. No array returns. ',
         'cpp':'Submit a free solve function without main. Use const std::string& and const std::vector<int>& inputs. '
               'Array returns use std::vector<int>. ',
     }[language]
@@ -152,6 +155,8 @@ def language_instruction(language):
         'Return values, never print results or parse stdin; the trusted harness handles I/O. '
         'Do not mutate inputs, access files/network, spawn processes, or use third-party dependencies. '
         'List valid input bounds and all edge-case behavior in the question. '
+        'Keep every intermediate arithmetic operation and expected return within the declared type bounds. '
+        'Never create a signed overflow test for an int return. '
         'Source fields are plain code, without Markdown fences. ' + STRUCTURE_GUIDE +
         'Native structured types are input-only; return a scalar or an allowed int_array. ' +
         {'c':'Graph has size, degree[24], adj[24][24]. ', 'java':'Graph has int[][] adj. ',

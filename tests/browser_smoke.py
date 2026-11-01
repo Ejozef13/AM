@@ -16,6 +16,7 @@ from practice_web import PracticeApp, make_server
 from progress_store import ProgressStore
 from test_ai_exercises import FixtureRunner, NOTES, REFERENCE, draft, review, response
 from test_note_retrieval import pdf_bytes
+from test_web_retrieval import SOURCE
 
 
 def main():
@@ -49,9 +50,38 @@ def main():
                 page.locator('#notes-file').set_input_files(str(pdf))
                 expect(page.locator('#notes')).to_have_value(re.compile('Factorial practice notes.'))
             page.locator('#notes').fill(NOTES); page.locator('#topic').fill('Functions and recursion')
-            with patch('ai_exercises.api',side_effect=[response(draft()),response(review())]) as model:
-                page.locator('#start').click(); page.locator('#workspace').wait_for(state='visible')
+            expect(page.locator('#am-circuits path')).to_have_count(18)
+            page.emulate_media(reduced_motion='reduce')
+            assert page.locator('#am-circuits .pulse').first.evaluate('(node) => getComputedStyle(node).animationName') == 'none'
+            page.emulate_media(reduced_motion='no-preference')
+            expect(page.locator('#use-web')).not_to_be_checked()
+            page.locator('#use-web').check()
+            with patch('practice_sessions.search_references', side_effect=ValueError('Internet reference retrieval failed. Uncheck internet references to retry.')), patch('ai_exercises.api') as unused_model:
+                page.locator('#start').click()
+                expect(page.locator('#error')).to_contain_text('Internet reference retrieval failed')
+                expect(page.locator('#notes')).to_have_value(NOTES)
+                expect(page.locator('#workspace')).not_to_be_visible()
+                expect(page.locator('body')).not_to_have_class(re.compile('am-working'))
+                unused_model.assert_not_called()
+            generation_gate = threading.Event()
+            replies = iter([response(draft()), response(review())])
+            def model_reply(*_args, **_kwargs):
+                if not generation_gate.wait(10):
+                    raise RuntimeError('Browser did not release controlled generation')
+                return next(replies)
+            with patch('practice_sessions.search_references', return_value=[SOURCE]) as web, patch('ai_exercises.api',side_effect=model_reply) as model:
+                page.locator('#start').click()
+                try:
+                    expect(page.locator('body')).to_have_class(re.compile('am-working'))
+                    expect(page.locator('#am-presence')).to_contain_text('AM THINKING')
+                    if args.screenshots: page.screenshot(path=str(args.output/'generating.png'),full_page=True)
+                finally:
+                    generation_gate.set()
+                page.locator('#workspace').wait_for(state='visible')
+                expect(page.locator('body')).not_to_have_class(re.compile('am-working'))
                 assert model.call_count==2
+                web.assert_called_once()
+                expect(page.locator('#retrieval-sources a')).to_have_attribute('href', SOURCE['url'])
             page.locator('#source').fill(REFERENCE)
             expect(page.locator('#draft-status')).to_contain_text('Draft saved')
             # Save B, then return to already-saved A while B is queued: A must win.
@@ -63,6 +93,7 @@ def main():
             saved=next(iter(ProgressStore(database).load_sessions().values()))
             assert saved['drafts']['0']['source']==REFERENCE
             assert saved['drafts']['0']['version']>=3
+            assert saved['citations'][-1] == SOURCE
             assert page.locator('.token-keyword').count()>0
             assert int(page.locator('.line-numbers').inner_text().splitlines()[-1])>=5
             # A full server restart proves restoration comes from SQLite, not browser state.
@@ -91,7 +122,7 @@ def main():
             expect(page.locator('#study-stats')).to_contain_text('0/1 today')
             assert ProgressStore(database).load_sessions()=={}
             assert not errors,errors
-            print('PASS: real HTTP/UI generation fixtures, PDF upload, goals, highlighted editor, autosave, server restart/resume, hints, grading, summary, export/delete, mobile overflow.')
+            print('PASS: real HTTP/UI generation fixtures, PDF upload, goals, opt-in internet context, circuit animation/reduced motion, highlighted editor, autosave, server restart/resume, hints, grading, summary, export/delete, mobile overflow.')
             print('Model and execution responses are controlled fixtures; these are not live-generation measurements.')
         finally:
             context.close(); browser.close(); server.shutdown(); server.server_close(); thread.join(3)

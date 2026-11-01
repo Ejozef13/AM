@@ -13,6 +13,8 @@ LANGUAGES = [
 def study_input(data, allowed_languages=('python',)):
     if data.get("language") not in allowed_languages:
         raise ValueError("This language is not available in the current mode. Set up its runtime first.")
+    if type(data.get('use_web', False)) is not bool:
+        raise ValueError('Internet references must be enabled or disabled explicitly.')
     topic, notes = data.get("topic", ""), data.get("notes", "")
     if not isinstance(topic, str) or len(topic) > 160:
         raise ValueError("Keep the topic below 160 characters.")
@@ -20,6 +22,8 @@ def study_input(data, allowed_languages=('python',)):
         raise ValueError("Keep notes below 200,000 characters.")
     if not topic.strip() and not notes.strip():
         raise ValueError("Add a topic or some notes to guide your session.")
+    if data.get('use_web') and not topic.strip():
+        raise ValueError('Add a topic for internet references; your notes are never sent as a search query.')
     count, difficulty = data.get("count", 3), data.get("difficulty", "standard")
     if type(count) is not int or not 1 <= count <= 5:
         raise ValueError("Choose one to five exercises.")

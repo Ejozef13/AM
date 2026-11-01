@@ -17,6 +17,8 @@ the installed model; Docker compiles and executes submissions.
 | Test-result labels and language display names | `web/app.js`: `labels` and `languageLabels` near the top |
 | Sample notes | `web/app.js`: `sample` click handler |
 | Setup mode explanation | `web/app.js`: `/api/setup` response handler at the bottom |
+| Circuit routes and activity | `web/app.js`: `drawCircuits`, `setBusy`; `web/app.css`: machine room section |
+| Optional internet reference lookup | `web_retrieval.py`; checkbox in `web/index.html` |
 | Generation progress text | `ai_exercises.py`: calls to `self.progress` |
 | Supported languages and setup metadata | `study_input.py`: `LANGUAGES`; `practice_web.py`: `/api/setup` |
 
@@ -47,6 +49,7 @@ AM/
 ├── progress_store.py           SQLite, activity, goals, and review schedule
 ├── learning_paths.py           Curriculum topic lists (no questions)
 ├── note_retrieval.py           Bounded PDF extraction and passage retrieval
+├── web_retrieval.py            Opt-in Wikipedia excerpts, bounds, HTTPS transport
 ├── structures.py               Tagged encodings and Python node adapters
 ├── native_structures.py        Native node types/builders/serializers
 ├── generation_diagnostics.py   Optional local rejected-generation reports

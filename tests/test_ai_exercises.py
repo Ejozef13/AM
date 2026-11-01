@@ -312,9 +312,11 @@ class GeneratedTests(unittest.TestCase):
 
     def test_no_bug_is_not_published(self):
         raw = draft() | {"starter_code": REFERENCE}
-        with patch("ai_exercises.api", side_effect=[response(raw), response(review())] * 2):
+        patch_response = response({'starter_code': REFERENCE, 'hints': raw['hints']})
+        with patch("ai_exercises.api", side_effect=[response(raw), response(review()), patch_response, patch_response] * 2) as api:
             with self.assertRaisesRegex(AMError, "no intended bug"):
                 self.build()
+        self.assertEqual(api.call_count, 8)
 
     def test_malformed_evidence_and_json_are_rejected_before_execution(self):
         for change in ({"notes_quote": "invented quote"}, {"starter_code": "bad syntax !"},
