@@ -66,13 +66,15 @@ class ChatTests(unittest.TestCase):
 
         second = mocked.call_args_list[1].args[1]["messages"]
         self.assertEqual(
-            [message["content"] for message in second],
+            [message["content"] for message in second[1:]],
             ["first", "one", "second"],
         )
 
+        self.assertEqual(second[0]["role"], "system")
+        self.assertIn("Never mock intelligence", second[0]["content"])
         third = mocked.call_args_list[2].args[1]["messages"]
         self.assertEqual(
-            third,
+            third[1:],
             [{"role": "user", "content": "third"}],
         )
 
@@ -84,7 +86,7 @@ class ChatTests(unittest.TestCase):
 
         recovered = mocked.call_args_list[1].args[1]["messages"]
         self.assertEqual(
-            recovered,
+            recovered[1:],
             [{"role": "user", "content": "good"}],
         )
         self.assertIn("not added", text)
@@ -96,7 +98,8 @@ class ChatTests(unittest.TestCase):
         )
 
         recovered = mocked.call_args_list[1].args[1]["messages"]
-        self.assertEqual(len(recovered), 1)
+        self.assertEqual([item["role"] for item in recovered], ["system", "user"])
+        self.assertEqual(recovered[-1]["content"], "good")
 
     def test_turn_limit_and_reset(self):
         mocked, text = self.session(
@@ -144,7 +147,8 @@ class ChatTests(unittest.TestCase):
         )
 
         recovered = mocked.call_args_list[1].args[1]["messages"]
-        self.assertEqual(len(recovered), 1)
+        self.assertEqual([item["role"] for item in recovered], ["system", "user"])
+        self.assertEqual(recovered[-1]["content"], "good")
         self.assertIn("interrupted", text)
 
     def test_eof_exits(self):

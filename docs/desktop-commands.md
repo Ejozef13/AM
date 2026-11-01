@@ -10,7 +10,8 @@ git switch codex/multilanguage-practice
 git pull --ff-only
 ```
 
-Compiler setup already passed on your desktop; this update needs no rebuild.
+Existing installations with passing compiler probes need no rebuild for UI updates.
+New installations should follow [runtime setup](multilanguage-practice.md).
 
 ## AM practice website
 
@@ -26,7 +27,8 @@ there is no need to stop/restart. See [Docker access](docker-access.md).
 Visit http://127.0.0.1:8090. Choose a language, add a
 topic and notes, and start with one exercise. The default model is
 `am-study:latest`, configured from `gpt-oss:20b` in `infrastructure/Modelfile`.
-Startup reports the actual installed model metadata.
+Startup reports the actual installed model metadata. See [AI model and alternate
+model commands](../README.md#ai-model), including first-exercise troubleshooting.
 
 Stop with Ctrl+C in that terminal, or in a second terminal:
 

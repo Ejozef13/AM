@@ -50,6 +50,8 @@ class GenerationOptimizationTests(unittest.TestCase):
         for call in api.call_args_list:
             payload = call.args[1]
             self.assertEqual(payload['think'],'low')
+            self.assertIn('Never mock intelligence', payload['messages'][0]['content'])
+            self.assertIn('Keep personality out of code', payload['messages'][0]['content'])
             self.assertEqual(payload['options']['num_predict'],8000)
             self.assertEqual(payload['format']['properties']['tests']['maxItems'],5)
         task = json.loads(api.call_args_list[1].args[1]['messages'][1]['content'])['exercise']

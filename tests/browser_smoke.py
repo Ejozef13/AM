@@ -39,6 +39,7 @@ def main():
         try:
             page.goto(f'http://127.0.0.1:{server.server_port}')
             page.locator('#setup').wait_for(state='visible')
+            expect(page.locator('#model-status')).to_contain_text('Author and author repair: am-study:latest')
             page.locator('#study-dashboard').wait_for(state='visible')
             page.locator('#daily-goal').fill('2'); page.locator('#save-goal').click()
             expect(page.locator('#study-stats')).to_contain_text('/2 today')
@@ -73,7 +74,7 @@ def main():
             assert page.locator('#source').input_value()==REFERENCE
             page.locator('#hint').click(); page.get_by_text('Check the base case.',exact=True).wait_for()
             page.locator('#run').click()
-            page.get_by_role('heading',name='All 6 tests passed. You found the fix.').wait_for()
+            page.get_by_role('heading',name='All 6 tests passed. Humanity survives another test case.').wait_for()
             expect(page.locator('#study-stats')).to_contain_text('1/2 today')
             if args.screenshots: page.screenshot(path=str(args.output/'exercise.png'),full_page=True)
             page.locator('#next-exercise').click(); page.locator('#session-summary').wait_for(state='visible')

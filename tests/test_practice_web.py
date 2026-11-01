@@ -62,6 +62,33 @@ class PracticeWebTests(unittest.TestCase):
         except urllib.error.HTTPError as error:
             return error.code, error.read(), error.headers
 
+    def test_setup_reports_selected_models_without_inventing_base_identity(self):
+        generator = self.app.sessions.generator
+        generator.model = 'custom-author:latest'
+        generator.review_model = 'custom-review:latest'
+        generator.label = 'Test model status'
+        status, body, _ = self.request('/api/setup')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)['models'], {
+            'author': 'custom-author:latest', 'review': 'custom-review:latest',
+            'base': 'unknown', 'context': 32768})
+
+    def test_preparation_rejection_preserves_existing_session_and_exposes_recovery(self):
+        from am_core import AMError
+        before = dict(self.app.sessions.sessions)
+        for diagnostics in (False, True):
+            with self.subTest(diagnostics=diagnostics):
+                self.app.diagnostics = diagnostics
+                with patch.object(self.app.sessions, 'create', side_effect=AMError('Draft rejected')), patch('sys.stderr', new_callable=io.StringIO) as stream:
+                    status, body, _ = self.request('/api/session', {})
+                self.assertEqual(status, 503)
+                message = json.loads(body)['error']
+                self.assertIn('Draft rejected', message)
+                self.assertIn('No session was created', message)
+                self.assertIn('last-generation.json' if diagnostics else '--diagnostics', message)
+                self.assertIn('Draft rejected', stream.getvalue())
+                self.assertEqual(self.app.sessions.sessions, before)
+
     def test_public_lesson_has_no_reference_key_or_hints(self):
         lesson = self.app.public_lesson(self.lesson)
         self.assertNotIn("reference_solution", lesson)

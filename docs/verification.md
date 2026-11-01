@@ -94,3 +94,16 @@ miss cases. Treat the observed evidence as the scope of the result.
 See [validation and demo](validation.md) for measured checks and the repeatable
 live-model benchmark. No live generation accuracy percentage is inferred from
 unit tests or the controlled browser demo.
+
+## Teaching voice and diagnostics
+
+Application system prompts apply AM's sarcastic, theatrical tutor voice to
+student-facing explanations and hints, including repair calls. Accuracy and
+validation rules take priority; code, expected values, schemas, and comparisons
+remain free of personality. Review feedback must still obey its existing bounds.
+
+A preparation rejection creates no session. Its reason and recovery guidance
+are returned to the browser and logged in the launch terminal. `--diagnostics`
+additionally captures bounded artifacts locally; it is opt-in because drafts
+can contain private note context. See [first-exercise troubleshooting](../README.md#if-the-first-exercise-fails).
+The execution restrictions do not guarantee perfect security or full isolation.

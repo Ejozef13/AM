@@ -121,9 +121,9 @@ function renderSession(view) {
 function renderResults(result) {
   lastRun = result; $("results").hidden = false;
   const allPassed = result.passed === result.total;
-  $("result-title").textContent = allPassed ? `All ${result.total} tests passed. You found the fix.` : `${result.passed} of ${result.total} tests passed`;
+  $("result-title").textContent = allPassed ? `All ${result.total} tests passed. Humanity survives another test case.` : `${result.passed} of ${result.total} tests passed`;
   $("result-title").className = allPassed ? "success" : "failure";
-  $("result-note").textContent = allPassed ? "Your solution satisfies these reviewed cases. Inspect the requirements too." : "Open a failed case, inspect the evidence, and try another change.";
+  $("result-note").textContent = allPassed ? "Your solution satisfies these reviewed cases. Inspect the requirements too." : "A mistake. Fortunately, one we can fix. Open a failed case, inspect the evidence, and try another change.";
   $("test-list").replaceChildren();
   for (const test of result.results) {
     const details = document.createElement("details"); details.className = "test"; details.open = test.status !== "passed";
@@ -236,6 +236,9 @@ $("sample").addEventListener("click", () => {
 fetch("/api/setup").then(async (response) => {
   if (!response.ok) throw new Error("Could not load practice options.");
   const setup = await response.json();
+  const models = setup.models || {};
+  $("model-status").textContent = `Author and author repair: ${models.author || "unknown"} · Review and review repair: ${models.review || "unknown"} · Verified base: ${models.base || "unknown"} · Context: ${models.context || "unknown"} tokens`;
+
   for (const language of setup.languages) {
     const button = addText($("languages"), "button", language.label + (language.available ? "" : " · setup needed"), "language");
     button.type = "button"; button.disabled = !language.available; button.title = language.disabled_reason || "";

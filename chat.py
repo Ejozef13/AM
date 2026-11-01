@@ -5,6 +5,7 @@ import argparse
 from am_core import (
     AMError,
     DEFAULT_MODEL,
+    PERSONA,
     api,
     chat_answer,
     metrics,
@@ -115,7 +116,7 @@ def run_chat(
 
         payload = {
             "model": model,
-            "messages": pending,
+            "messages": [{"role": "system", "content": PERSONA}] + pending,
             "think": "low",
             "stream": False,
             "keep_alive": "5m",

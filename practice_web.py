@@ -149,7 +149,10 @@ def make_server(app, port=8090):
                         'disabled_reason': '' if available else 'Compiler runtime setup required'})
                 self.reply(200, {"languages": languages,
                                  "mode": "ai-generated",
-                                 "planner_label": generator.label})
+                                 "planner_label": generator.label,
+                                 "models": {"author": getattr(generator, 'model', 'unknown'),
+                                            "review": getattr(generator, 'review_model', 'unknown'),
+                                            "base": "unknown", "context": 32768}})
                 return
             if self.path == '/api/dashboard':
                 if app.persistence:
@@ -249,7 +252,13 @@ def make_server(app, port=8090):
             except AMError as error:
                 detail = str(error)
                 suffix = "" if "No session was created" in detail else " No session was created."
-                status, payload = 503, {"error": f"AM could not prepare this session: {detail}{suffix}"}
+                # Always expose a recovery route; artifact capture remains opt-in.
+                recovery = (" Inspect the launch terminal and .am-diagnostics/last-generation.json."
+                            if app.diagnostics else
+                            " Retry one introductory exercise. For rejection details, restart with "
+                            "python am.py on --diagnostics and reproduce the request.")
+                print('AM preparation failure: ' + json.dumps(detail), file=sys.stderr, flush=True)
+                status, payload = 503, {"error": f"AM could not prepare this session: {detail}{suffix}{recovery}"}
             except DockerAuthorizationError as error:
                 if app.authorization:
                     app.authorization.request_renewal()
